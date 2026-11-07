@@ -1,4 +1,4 @@
-import { prisma } from "./prisma";
+import { prisma, ensureDatabaseSchema } from "./prisma";
 
 export interface AppConfigData {
   id: string;
@@ -47,6 +47,7 @@ export const DEFAULT_CONFIG: AppConfigData = {
 
 export async function getAppConfig(): Promise<AppConfigData> {
   try {
+    await ensureDatabaseSchema();
     const config = await prisma.appConfig.findUnique({
       where: { id: "global" },
     });

@@ -194,3 +194,4 @@ Ao receber a confirmação:
 1. O pedido é atualizado para `status: "paid"`.
 2. O evento SSE `order_paid` é emitido instantaneamente para o navegador do cliente.
 3. O atendente envia a mensagem de parabéns com o **Link Exclusivo de Entrega**.
+

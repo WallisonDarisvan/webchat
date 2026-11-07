@@ -12,6 +12,8 @@ export function ChatInput({ onSendMessage, disabled = false }: ChatInputProps) {
   const [text, setText] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const isSubmittingRef = useRef(false);
+
   // Focus input when attendant stops typing
   useEffect(() => {
     if (!disabled) {
@@ -21,16 +23,16 @@ export function ChatInput({ onSendMessage, disabled = false }: ChatInputProps) {
 
   const handleSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!text.trim() || disabled) return;
-    onSendMessage(text.trim());
-    setText("");
-  };
+    const message = text.trim();
+    if (!message || disabled || isSubmittingRef.current) return;
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit();
-    }
+    isSubmittingRef.current = true;
+    setText("");
+    onSendMessage(message);
+
+    setTimeout(() => {
+      isSubmittingRef.current = false;
+    }, 400);
   };
 
   return (
@@ -42,7 +44,6 @@ export function ChatInput({ onSendMessage, disabled = false }: ChatInputProps) {
             type="text"
             value={text}
             onChange={(e) => setText(e.target.value)}
-            onKeyDown={handleKeyDown}
             disabled={disabled}
             placeholder={
               disabled ? "Gabriel está digitando uma resposta..." : "Digite sua mensagem..."

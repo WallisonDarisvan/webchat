@@ -36,14 +36,28 @@ export function ChatFeed({ messages, isTyping, onSimulatePayment }: ChatFeedProp
         </span>
       </div>
 
-      {/* Messages */}
-      {messages.map((message) => (
-        <ChatBubble
-          key={message.id}
-          message={message}
-          onSimulatePayment={onSimulatePayment}
-        />
-      ))}
+      {/* Messages with duplicate defense */}
+      {messages
+        .filter((message, index, arr) => {
+          if (index > 0) {
+            const prev = arr[index - 1];
+            if (
+              message.sender === "user" &&
+              prev.sender === "user" &&
+              message.content.trim() === prev.content.trim()
+            ) {
+              return false;
+            }
+          }
+          return true;
+        })
+        .map((message) => (
+          <ChatBubble
+            key={message.id}
+            message={message}
+            onSimulatePayment={onSimulatePayment}
+          />
+        ))}
 
       {/* Typing Indicator */}
       {isTyping && <TypingIndicator />}

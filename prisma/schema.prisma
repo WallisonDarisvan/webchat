@@ -1,5 +1,5 @@
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -27,7 +27,7 @@ model ChatMessage {
   sessionId String      @map("session_id")
   session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   sender    String      // "user" | "agent" | "system"
-  content   String      @db.Text
+  content   String
   metadata  Json?
   createdAt DateTime    @default(now()) @map("created_at")
 
@@ -40,12 +40,12 @@ model Order {
   sessionId    String      @map("session_id")
   session      ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   externalId   String?     @map("external_id")
-  amount       Decimal     @db.Decimal(10, 2)
+  amount       Float
   status       String      @default("pending") // "pending" | "paid" | "cancelled" | "refunded"
   paidAt       DateTime?   @map("paid_at")
-  deliveryLink String?     @map("delivery_link") @db.Text
-  pixCode      String?     @map("pix_code") @db.Text
-  pixQrCodeUrl String?     @map("pix_qr_code_url") @db.Text
+  deliveryLink String?     @map("delivery_link")
+  pixCode      String?     @map("pix_code")
+  pixQrCodeUrl String?     @map("pix_qr_code_url")
   createdAt    DateTime    @default(now()) @map("created_at")
   updatedAt    DateTime    @updatedAt @map("updated_at")
 
@@ -60,10 +60,10 @@ model AppConfig {
   aiApiKey             String   @default("") @map("ai_api_key")
   aiModel              String   @default("deepseek-chat") @map("ai_model")
   aiTemperature        Float    @default(0.75) @map("ai_temperature")
-  systemPrompt         String   @default("") @map("system_prompt") @db.Text
+  systemPrompt         String   @default("") @map("system_prompt")
   productName          String   @default("Método Alta Conversão") @map("product_name")
-  productPrice         Decimal  @default(97.00) @map("product_price") @db.Decimal(10, 2)
-  productDeliveryLink  String   @default("https://seusite.com/download/acesso-vip") @map("product_delivery_link") @db.Text
+  productPrice         Float    @default(97.00) @map("product_price")
+  productDeliveryLink  String   @default("https://seusite.com/download/acesso-vip") @map("product_delivery_link")
   paymentGateway       String   @default("simulated") @map("payment_gateway")
   paymentGatewayToken  String   @default("") @map("payment_gateway_token")
   paymentWebhookSecret String   @default("") @map("payment_webhook_secret")
@@ -71,4 +71,3 @@ model AppConfig {
 
   @@map("app_configs")
 }
-

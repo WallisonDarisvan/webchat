@@ -101,8 +101,20 @@ export default function ChatPage() {
         if (parsed.type === "new_message") {
           const newMsg = parsed.payload as MessageData;
           setMessages((prev) => {
-            // Avoid duplicate message appending
             if (prev.some((m) => m.id === newMsg.id)) return prev;
+
+            // If it's a user message, replace matching temp message to prevent duplicate bubble
+            if (newMsg.sender === "user") {
+              const tempIndex = prev.findIndex(
+                (m) => m.sender === "user" && m.id.startsWith("temp-") && m.content === newMsg.content
+              );
+              if (tempIndex !== -1) {
+                const updated = [...prev];
+                updated[tempIndex] = newMsg;
+                return updated;
+              }
+            }
+
             return [...prev, newMsg];
           });
         }

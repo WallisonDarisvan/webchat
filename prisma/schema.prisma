@@ -1,0 +1,74 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model ChatSession {
+  id        String        @id @default(uuid())
+  deviceId  String        @unique @map("device_id")
+  userName  String        @map("user_name")
+  lastIp    String?       @map("last_ip")
+  userAgent String?       @map("user_agent")
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+  messages  ChatMessage[]
+  orders    Order[]
+
+  @@index([deviceId])
+  @@map("chat_sessions")
+}
+
+model ChatMessage {
+  id        String      @id @default(uuid())
+  sessionId String      @map("session_id")
+  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sender    String      // "user" | "agent" | "system"
+  content   String      @db.Text
+  metadata  Json?
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  @@index([sessionId])
+  @@map("chat_messages")
+}
+
+model Order {
+  id           String      @id @default(uuid())
+  sessionId    String      @map("session_id")
+  session      ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  externalId   String?     @map("external_id")
+  amount       Decimal     @db.Decimal(10, 2)
+  status       String      @default("pending") // "pending" | "paid" | "cancelled" | "refunded"
+  paidAt       DateTime?   @map("paid_at")
+  deliveryLink String?     @map("delivery_link") @db.Text
+  pixCode      String?     @map("pix_code") @db.Text
+  pixQrCodeUrl String?     @map("pix_qr_code_url") @db.Text
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  @@index([sessionId])
+  @@index([externalId])
+  @@map("orders")
+}
+
+model AppConfig {
+  id                   String   @id @default("global")
+  aiBaseUrl            String   @default("https://api.deepseek.com") @map("ai_base_url")
+  aiApiKey             String   @default("") @map("ai_api_key")
+  aiModel              String   @default("deepseek-chat") @map("ai_model")
+  aiTemperature        Float    @default(0.75) @map("ai_temperature")
+  systemPrompt         String   @default("") @map("system_prompt") @db.Text
+  productName          String   @default("Método Alta Conversão") @map("product_name")
+  productPrice         Decimal  @default(97.00) @map("product_price") @db.Decimal(10, 2)
+  productDeliveryLink  String   @default("https://seusite.com/download/acesso-vip") @map("product_delivery_link") @db.Text
+  paymentGateway       String   @default("simulated") @map("payment_gateway")
+  paymentGatewayToken  String   @default("") @map("payment_gateway_token")
+  paymentWebhookSecret String   @default("") @map("payment_webhook_secret")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@map("app_configs")
+}
+

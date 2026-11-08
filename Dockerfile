@@ -52,7 +52,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 # Ensure full permissions for SQLite read/write
-RUN chown -R nextjs:nodejs /app/prisma
+RUN chmod -R 777 /app/prisma && chown -R nextjs:nodejs /app/prisma
 
 USER nextjs
 

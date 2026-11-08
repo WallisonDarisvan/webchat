@@ -1,8 +1,15 @@
 import { PrismaClient } from "@prisma/client";
 
-// Ensure DATABASE_URL is always a valid SQLite file protocol for SQLite provider
-if (!process.env.DATABASE_URL || !process.env.DATABASE_URL.startsWith("file:")) {
-  process.env.DATABASE_URL = "file:./prisma/dev.db";
+// Ensure DATABASE_URL is always a valid SQLite file protocol for SQLite provider.
+// Note: In Prisma SQLite, relative paths starting with './' are resolved relative to the schema.prisma directory (./prisma).
+// Therefore, 'file:./dev.db' points correctly to 'prisma/dev.db'.
+// If 'file:./prisma/dev.db' is passed, Prisma looks for 'prisma/prisma/dev.db' which fails with SQLite Error 14.
+if (
+  !process.env.DATABASE_URL ||
+  !process.env.DATABASE_URL.startsWith("file:") ||
+  process.env.DATABASE_URL.includes("prisma/dev.db")
+) {
+  process.env.DATABASE_URL = "file:./dev.db";
 }
 
 const globalForPrisma = globalThis as unknown as {

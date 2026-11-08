@@ -1,8 +1,6 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import { VisitorModal } from "@/components/chat/VisitorModal";
 import { ChatHeader } from "@/components/chat/ChatHeader";
@@ -400,21 +398,6 @@ export function ChatContainer({ attendantSlug, showBackButton = true }: ChatCont
   return (
     <div className="flex justify-center min-h-screen bg-[#0b141a]">
       <main className="w-full max-w-2xl h-screen flex flex-col bg-[#111b21] shadow-2xl relative border-x border-[#222e35]/50">
-        {showBackButton && (
-          <div className="bg-[#111b21] px-4 py-1.5 border-b border-[#222e35]/60 flex items-center justify-between text-xs text-[#8696a0]">
-            <Link
-              href="/"
-              className="inline-flex items-center gap-1.5 hover:text-white transition-colors"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Ver todos os atendentes</span>
-            </Link>
-            <span className="text-[11px] text-[#8696a0]/70 font-mono">
-              /{attendantSlug || "gabriel"}
-            </span>
-          </div>
-        )}
-
         <ChatHeader
           userName={userName}
           agentName={agentName}

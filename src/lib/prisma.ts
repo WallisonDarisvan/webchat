@@ -137,28 +137,32 @@ export async function ensureDatabaseSchema() {
       );
     `);
 
-    // 2. Ensure all columns exist (in case of an older database schema)
-    const alterCommands = [
-      `ALTER TABLE "app_configs" ADD COLUMN "agent_avatar" TEXT DEFAULT ''`,
-      `ALTER TABLE "app_configs" ADD COLUMN "post_purchase_minutes" INTEGER DEFAULT 10`,
-      `ALTER TABLE "app_configs" ADD COLUMN "non_purchase_minutes" INTEGER DEFAULT 15`,
-      `ALTER TABLE "app_configs" ADD COLUMN "cooldown_hours" INTEGER DEFAULT 24`,
-      `ALTER TABLE "chat_sessions" ADD COLUMN "locked_until" DATETIME`,
-      `ALTER TABLE "chat_sessions" ADD COLUMN "lock_reason" TEXT`,
-      `ALTER TABLE "chat_sessions" ADD COLUMN "return_handled" BOOLEAN DEFAULT 0`,
-      `ALTER TABLE "chat_sessions" ADD COLUMN "attendant_id" TEXT`,
-      `ALTER TABLE "chat_sessions" ADD COLUMN "attendant_slug" TEXT`,
-      `ALTER TABLE "orders" ADD COLUMN "attendant_id" TEXT`,
-      `ALTER TABLE "orders" ADD COLUMN "attendant_slug" TEXT`,
-      `ALTER TABLE "attendants" ADD COLUMN "bio" TEXT DEFAULT 'Especialista em Vendas e Atendimento'`,
-      `ALTER TABLE "attendants" ADD COLUMN "is_active" BOOLEAN DEFAULT 1`,
+    // 2. Ensure all columns exist (checks table_info first to avoid noisy terminal logs)
+    const requiredColumns = [
+      { table: "app_configs", column: "agent_avatar", sql: `ALTER TABLE "app_configs" ADD COLUMN "agent_avatar" TEXT DEFAULT ''` },
+      { table: "app_configs", column: "post_purchase_minutes", sql: `ALTER TABLE "app_configs" ADD COLUMN "post_purchase_minutes" INTEGER DEFAULT 10` },
+      { table: "app_configs", column: "non_purchase_minutes", sql: `ALTER TABLE "app_configs" ADD COLUMN "non_purchase_minutes" INTEGER DEFAULT 15` },
+      { table: "app_configs", column: "cooldown_hours", sql: `ALTER TABLE "app_configs" ADD COLUMN "cooldown_hours" INTEGER DEFAULT 24` },
+      { table: "chat_sessions", column: "locked_until", sql: `ALTER TABLE "chat_sessions" ADD COLUMN "locked_until" DATETIME` },
+      { table: "chat_sessions", column: "lock_reason", sql: `ALTER TABLE "chat_sessions" ADD COLUMN "lock_reason" TEXT` },
+      { table: "chat_sessions", column: "return_handled", sql: `ALTER TABLE "chat_sessions" ADD COLUMN "return_handled" BOOLEAN DEFAULT 0` },
+      { table: "chat_sessions", column: "attendant_id", sql: `ALTER TABLE "chat_sessions" ADD COLUMN "attendant_id" TEXT` },
+      { table: "chat_sessions", column: "attendant_slug", sql: `ALTER TABLE "chat_sessions" ADD COLUMN "attendant_slug" TEXT` },
+      { table: "orders", column: "attendant_id", sql: `ALTER TABLE "orders" ADD COLUMN "attendant_id" TEXT` },
+      { table: "orders", column: "attendant_slug", sql: `ALTER TABLE "orders" ADD COLUMN "attendant_slug" TEXT` },
+      { table: "attendants", column: "bio", sql: `ALTER TABLE "attendants" ADD COLUMN "bio" TEXT DEFAULT 'Especialista em Vendas e Atendimento'` },
+      { table: "attendants", column: "is_active", sql: `ALTER TABLE "attendants" ADD COLUMN "is_active" BOOLEAN DEFAULT 1` },
     ];
 
-    for (const sql of alterCommands) {
+    for (const item of requiredColumns) {
       try {
-        await prisma.$executeRawUnsafe(sql);
+        const columns = await prisma.$queryRawUnsafe<any[]>(`PRAGMA table_info("${item.table}")`);
+        const exists = columns.some((c: any) => c.name === item.column);
+        if (!exists) {
+          await prisma.$executeRawUnsafe(item.sql);
+        }
       } catch {
-        // Column already exists, safe to ignore
+        // Table or column check error, safe to ignore
       }
     }
 

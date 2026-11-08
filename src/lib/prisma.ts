@@ -1,5 +1,10 @@
 import { PrismaClient } from "@prisma/client";
 
+// Ensure DATABASE_URL is always a valid SQLite file protocol for SQLite provider
+if (!process.env.DATABASE_URL || !process.env.DATABASE_URL.startsWith("file:")) {
+  process.env.DATABASE_URL = "file:./prisma/dev.db";
+}
+
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };

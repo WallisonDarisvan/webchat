@@ -1,4 +1,4 @@
-import { getAppConfig, MediaItem, DEFAULT_MEDIA_INSTRUCTIONS } from "./config";
+import { getAppConfig, MediaItem, DEFAULT_MEDIA_INSTRUCTIONS, PromptTag } from "./config";
 import { splitIntoBubbles } from "./humanizer";
 
 export interface ChatHistoryItem {
@@ -83,9 +83,21 @@ ${mediaCatalogItems
   // Replace [NOME] and [TEMPO] variables
   const effectiveAgentName = config.agentName || "Gabriel Siqueira";
   const postPurchaseTimeStr = `${config.postPurchaseMinutes || 10} minutos`;
-  const processedPrompt = config.systemPrompt
+  let processedPrompt = config.systemPrompt
     .replace(/\[NOME\]/g, effectiveAgentName)
     .replace(/\[TEMPO\]/g, postPurchaseTimeStr);
+
+  // Replace any custom configured tags
+  try {
+    const customTags: PromptTag[] = JSON.parse(config.customTags || "[]");
+    for (const tag of customTags) {
+      if (tag.value && tag.type === "variable" && !tag.isSystem) {
+        const cleanName = tag.name.replace(/^\[+|\]+$/g, "");
+        const regex = new RegExp(`\\[${cleanName}\\]`, "gi");
+        processedPrompt = processedPrompt.replace(regex, tag.value);
+      }
+    }
+  } catch {}
 
   let directiveSection = "";
   if (params.systemDirective) {

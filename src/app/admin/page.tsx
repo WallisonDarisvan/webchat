@@ -29,8 +29,12 @@ import {
   Clock,
   Users,
   User,
+  Tag,
+  Edit2,
+  Search,
+  X,
 } from "lucide-react";
-import { DEFAULT_SYSTEM_PROMPT, DEFAULT_MEDIA_INSTRUCTIONS, MediaItem } from "@/lib/config";
+import { DEFAULT_SYSTEM_PROMPT, DEFAULT_MEDIA_INSTRUCTIONS, MediaItem, PromptTag, SYSTEM_DEFAULT_TAGS } from "@/lib/config";
 import { optimizeImageForVision } from "@/lib/image-optimizer";
 
 interface AdminConfig {
@@ -53,6 +57,7 @@ interface AdminConfig {
   paymentWebhookSecret: string;
   mediaCatalog: string; // JSON string of MediaItem[]
   mediaInstructions: string;
+  customTags?: string; // JSON string of PromptTag[]
   maxAgentPhotos: number;
   postPurchaseMinutes?: number;
   nonPurchaseMinutes?: number;
@@ -94,7 +99,7 @@ export default function AdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [passwordInput, setPasswordInput] = useState("");
   const [authError, setAuthError] = useState("");
-  const [activeTab, setActiveTab] = useState<"profile" | "ai" | "prompt" | "product" | "stats" | "media">("profile");
+  const [activeTab, setActiveTab] = useState<"profile" | "ai" | "prompt" | "tags" | "media" | "product" | "stats">("profile");
 
   // Config Form State
   const [config, setConfig] = useState<AdminConfig>({
@@ -113,11 +118,23 @@ export default function AdminPage() {
     paymentWebhookSecret: "",
     mediaCatalog: "[]",
     mediaInstructions: DEFAULT_MEDIA_INSTRUCTIONS,
+    customTags: "[]",
     maxAgentPhotos: 3,
     postPurchaseMinutes: 10,
     nonPurchaseMinutes: 15,
     cooldownHours: 24,
   });
+
+  // Tags Management State
+  const [customTagsList, setCustomTagsList] = useState<PromptTag[]>([]);
+  const [isTagModalOpen, setIsTagModalOpen] = useState(false);
+  const [editingTag, setEditingTag] = useState<PromptTag | null>(null);
+  const [tagNameInput, setTagNameInput] = useState("");
+  const [tagDescInput, setTagDescInput] = useState("");
+  const [tagValueInput, setTagValueInput] = useState("");
+  const [tagTypeInput, setTagTypeInput] = useState<"variable" | "action">("variable");
+  const [tagSearchQuery, setTagSearchQuery] = useState("");
+  const [copiedTagId, setCopiedTagId] = useState<string | null>(null);
 
   // Media Management State
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
@@ -236,6 +253,12 @@ export default function AdminPage() {
         } catch {
           setMediaList([]);
         }
+        try {
+          const parsedTags: PromptTag[] = JSON.parse(data.config.customTags || "[]");
+          setCustomTagsList(parsedTags);
+        } catch {
+          setCustomTagsList([]);
+        }
       }
     } catch (err) {
       console.error("Error loading config:", err);
@@ -339,6 +362,7 @@ export default function AdminPage() {
         id: selectedAttendantId,
         attendantId: selectedAttendantId,
         mediaCatalog: JSON.stringify(mediaList),
+        customTags: JSON.stringify(customTagsList),
       };
 
       const res = await fetch("/api/admin/config", {
@@ -510,6 +534,97 @@ export default function AdminPage() {
     navigator.clipboard.writeText(tag);
     setMediaTagCopied(tag);
     setTimeout(() => setMediaTagCopied(null), 2000);
+  };
+
+  // Tags CRUD Handlers
+  const handleOpenNewTagModal = () => {
+    setEditingTag(null);
+    setTagNameInput("");
+    setTagDescInput("");
+    setTagValueInput("");
+    setTagTypeInput("variable");
+    setIsTagModalOpen(true);
+  };
+
+  const handleOpenEditTagModal = (tag: PromptTag) => {
+    setEditingTag(tag);
+    setTagNameInput(tag.name);
+    setTagDescInput(tag.description);
+    setTagValueInput(tag.value);
+    setTagTypeInput(tag.type || "variable");
+    setIsTagModalOpen(true);
+  };
+
+  const handleSaveTag = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    let cleanName = tagNameInput.trim();
+    if (!cleanName) {
+      alert("Por favor, informe o nome ou código da tag.");
+      return;
+    }
+    // Auto-format tag token to [UPPERCASE]
+    if (!cleanName.startsWith("[")) cleanName = "[" + cleanName;
+    if (!cleanName.endsWith("]")) cleanName = cleanName + "]";
+    cleanName = cleanName.toUpperCase().replace(/\s+/g, "_");
+
+    if (!tagDescInput.trim()) {
+      alert("Por favor, descreva para que serve a tag.");
+      return;
+    }
+
+    if (editingTag) {
+      const updated = customTagsList.map((t) =>
+        t.id === editingTag.id
+          ? {
+              ...t,
+              name: cleanName,
+              description: tagDescInput.trim(),
+              value: tagValueInput.trim(),
+              type: tagTypeInput,
+            }
+          : t
+      );
+      setCustomTagsList(updated);
+      setConfig((prev) => ({ ...prev, customTags: JSON.stringify(updated) }));
+      setIsTagModalOpen(false);
+      setEditingTag(null);
+    } else {
+      const allExisting = [...SYSTEM_DEFAULT_TAGS, ...customTagsList];
+      if (allExisting.some((t) => t.name.toLowerCase() === cleanName.toLowerCase())) {
+        alert("Já existe uma tag com este nome. Escolha outro nome.");
+        return;
+      }
+
+      const newTag: PromptTag = {
+        id: "tag_" + Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
+        name: cleanName,
+        description: tagDescInput.trim(),
+        value: tagValueInput.trim(),
+        type: tagTypeInput,
+        isSystem: false,
+      };
+
+      const updated = [...customTagsList, newTag];
+      setCustomTagsList(updated);
+      setConfig((prev) => ({ ...prev, customTags: JSON.stringify(updated) }));
+      setIsTagModalOpen(false);
+    }
+  };
+
+  const handleDeleteTag = (id: string) => {
+    const tag = customTagsList.find((t) => t.id === id);
+    if (!tag) return;
+    if (confirm(`Deseja realmente excluir a tag "${tag.name}"?`)) {
+      const updated = customTagsList.filter((t) => t.id !== id);
+      setCustomTagsList(updated);
+      setConfig((prev) => ({ ...prev, customTags: JSON.stringify(updated) }));
+    }
+  };
+
+  const handleCopyTagToken = (token: string, id: string) => {
+    navigator.clipboard.writeText(token);
+    setCopiedTagId(id);
+    setTimeout(() => setCopiedTagId(null), 2000);
   };
 
   if (isAuthenticated === null) {
@@ -849,6 +964,23 @@ export default function AdminPage() {
           </button>
 
           <button
+            onClick={() => setActiveTab("tags")}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all ${
+              activeTab === "tags"
+                ? "bg-emerald-600 text-white shadow-md shadow-emerald-950"
+                : "bg-[#182229] text-[#8696a0] hover:text-white hover:bg-[#202c33]"
+            }`}
+          >
+            <Tag className="w-4 h-4" />
+            <span>4. Tags & Variáveis</span>
+            {(SYSTEM_DEFAULT_TAGS.length + customTagsList.length) > 0 && (
+              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-emerald-400/20 text-emerald-300 font-bold">
+                {SYSTEM_DEFAULT_TAGS.length + customTagsList.length}
+              </span>
+            )}
+          </button>
+
+          <button
             onClick={() => setActiveTab("media")}
             className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all ${
               activeTab === "media"
@@ -857,7 +989,7 @@ export default function AdminPage() {
             }`}
           >
             <ImageIcon className="w-4 h-4" />
-            <span>4. Mídias & Instruções</span>
+            <span>5. Mídias & Instruções</span>
             {mediaList.length > 0 && (
               <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-emerald-400/20 text-emerald-300 font-bold">
                 {mediaList.length}
@@ -874,7 +1006,7 @@ export default function AdminPage() {
             }`}
           >
             <DollarSign className="w-4 h-4" />
-            <span>5. Produto & Pagamento</span>
+            <span>6. Produto & Pagamento</span>
           </button>
 
           <button
@@ -889,7 +1021,7 @@ export default function AdminPage() {
             }`}
           >
             <BarChart3 className="w-4 h-4" />
-            <span>6. Vendas & Auditoria</span>
+            <span>7. Vendas & Auditoria</span>
           </button>
         </div>
 
@@ -1336,57 +1468,48 @@ export default function AdminPage() {
                       Prompt de Sistema Completo
                     </label>
                     <p className="text-[11px] text-[#8696a0]">
-                      As tags <code className="bg-[#202c33] text-emerald-300 px-1 py-0.5 rounded font-mono">[NOME]</code> e <code className="bg-[#202c33] text-teal-300 px-1 py-0.5 rounded font-mono">[TEMPO]</code> são substituídas automaticamente em tempo real.
+                      Clique nas tags abaixo para inseri-las diretamente no texto do prompt.
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const textarea = document.getElementById("systemPromptTextarea") as HTMLTextAreaElement;
-                        if (textarea) {
-                          const start = textarea.selectionStart || 0;
-                          const end = textarea.selectionEnd || 0;
-                          const text = config.systemPrompt;
-                          const updated = text.substring(0, start) + "[NOME]" + text.substring(end);
-                          setConfig({ ...config, systemPrompt: updated });
-                          setTimeout(() => {
-                            textarea.focus();
-                            textarea.setSelectionRange(start + 6, start + 6);
-                          }, 50);
-                        } else {
-                          setConfig({ ...config, systemPrompt: config.systemPrompt + " [NOME]" });
-                        }
-                      }}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-mono text-xs hover:bg-emerald-500/25 transition-colors cursor-pointer"
-                      title="Clique para inserir [NOME] no prompt"
-                    >
-                      <span>+ Inserir [NOME]</span>
-                    </button>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {[...SYSTEM_DEFAULT_TAGS, ...customTagsList]
+                      .filter((t) => t.type === "variable")
+                      .map((tag) => (
+                        <button
+                          key={tag.id}
+                          type="button"
+                          onClick={() => {
+                            const textarea = document.getElementById("systemPromptTextarea") as HTMLTextAreaElement;
+                            if (textarea) {
+                              const start = textarea.selectionStart || 0;
+                              const end = textarea.selectionEnd || 0;
+                              const text = config.systemPrompt;
+                              const updated = text.substring(0, start) + tag.name + text.substring(end);
+                              setConfig({ ...config, systemPrompt: updated });
+                              setTimeout(() => {
+                                textarea.focus();
+                                textarea.setSelectionRange(start + tag.name.length, start + tag.name.length);
+                              }, 50);
+                            } else {
+                              setConfig({ ...config, systemPrompt: config.systemPrompt + " " + tag.name });
+                            }
+                          }}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-mono text-xs hover:bg-emerald-500/25 transition-colors cursor-pointer"
+                          title={`Inserir ${tag.name}: ${tag.description}`}
+                        >
+                          <span>+ {tag.name}</span>
+                        </button>
+                      ))}
 
                     <button
                       type="button"
-                      onClick={() => {
-                        const textarea = document.getElementById("systemPromptTextarea") as HTMLTextAreaElement;
-                        if (textarea) {
-                          const start = textarea.selectionStart || 0;
-                          const end = textarea.selectionEnd || 0;
-                          const text = config.systemPrompt;
-                          const updated = text.substring(0, start) + "[TEMPO]" + text.substring(end);
-                          setConfig({ ...config, systemPrompt: updated });
-                          setTimeout(() => {
-                            textarea.focus();
-                            textarea.setSelectionRange(start + 7, start + 7);
-                          }, 50);
-                        } else {
-                          setConfig({ ...config, systemPrompt: config.systemPrompt + " [TEMPO]" });
-                        }
-                      }}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-teal-500/15 border border-teal-500/30 text-teal-400 font-mono text-xs hover:bg-teal-500/25 transition-colors cursor-pointer"
-                      title="Clique para inserir [TEMPO] no prompt"
+                      onClick={() => setActiveTab("tags")}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#202c33] border border-[#26353d] text-[#8696a0] hover:text-white font-mono text-xs hover:border-[#3b4a54] transition-colors cursor-pointer ml-1"
+                      title="Gerenciar ou criar novas tags na aba de Tags"
                     >
-                      <span>+ Inserir [TEMPO]</span>
+                      <Tag className="w-3 h-3 text-emerald-400" />
+                      <span>Gerenciar Tags</span>
                     </button>
                   </div>
                 </div>
@@ -1403,7 +1526,320 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Tab 4: Mídias & Instruções de Uso na IA */}
+        {/* Tab 4: Gerenciador de Tags & Variáveis */}
+        {activeTab === "tags" && (
+          <div className="space-y-6 animate-in fade-in duration-200">
+            {/* Header Card */}
+            <div className="bg-[#111b21] border border-[#222e35] rounded-2xl p-6 shadow-xl space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#222e35] pb-4">
+                <div>
+                  <h2 className="text-base font-semibold text-white flex items-center gap-2">
+                    <Tag className="w-5 h-5 text-emerald-400" />
+                    <span>Gerenciador de Tags & Variáveis</span>
+                  </h2>
+                  <p className="text-xs text-[#8696a0] mt-1">
+                    Crie, edite ou exclua tags para enriquecer os prompts do sistema e acionar automações da IA.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleOpenNewTagModal}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-medium transition-all shadow-md shadow-emerald-950 shrink-0"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Criar Nova Tag</span>
+                </button>
+              </div>
+
+              {/* Informative Banner */}
+              <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs text-emerald-300 space-y-1">
+                <p className="font-semibold flex items-center gap-1.5">
+                  <Zap className="w-4 h-4 text-emerald-400" />
+                  <span>Como funcionam as Tags:</span>
+                </p>
+                <p className="text-emerald-200/80 leading-relaxed">
+                  • <strong>Variáveis de Texto:</strong> Ao inserir tags como <code className="bg-emerald-950 px-1.5 py-0.5 rounded text-white font-mono">[NOME]</code>, <code className="bg-emerald-950 px-1.5 py-0.5 rounded text-white font-mono">[TEMPO]</code> ou qualquer tag criada por você no Prompt de Sistema, ela é substituída dinamicamente pelo valor cadastrado antes de enviar à IA.
+                  <br />
+                  • <strong>Tags de Ação / Gatilhos:</strong> Tags como <code className="bg-emerald-950 px-1.5 py-0.5 rounded text-white font-mono">[GERAR_PAGAMENTO]</code> ou <code className="bg-emerald-950 px-1.5 py-0.5 rounded text-white font-mono">[ENCERRAR_CONVERSA]</code> são comandos de controle emitidos pela IA para disparar ações do sistema.
+                </p>
+              </div>
+
+              {/* Search & Counts */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
+                <div className="relative flex-1 max-w-md">
+                  <Search className="w-4 h-4 text-[#8696a0] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={tagSearchQuery}
+                    onChange={(e) => setTagSearchQuery(e.target.value)}
+                    placeholder="Buscar tags por nome, descrição ou valor..."
+                    className="w-full pl-10 pr-9 py-2 bg-[#202c33] border border-[#26353d] focus:border-emerald-500 rounded-xl text-xs sm:text-sm text-white outline-none"
+                  />
+                  {tagSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setTagSearchQuery("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8696a0] hover:text-white"
+                      title="Limpar busca"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 text-xs text-[#8696a0]">
+                  <span>
+                    Total: <strong className="text-white">{[...SYSTEM_DEFAULT_TAGS, ...customTagsList].length}</strong> tags ({SYSTEM_DEFAULT_TAGS.length} nativas, {customTagsList.length} personalizadas)
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Grid of Tags */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {[...SYSTEM_DEFAULT_TAGS, ...customTagsList]
+                .filter((t) => {
+                  if (!tagSearchQuery.trim()) return true;
+                  const q = tagSearchQuery.toLowerCase();
+                  return (
+                    t.name.toLowerCase().includes(q) ||
+                    t.description.toLowerCase().includes(q) ||
+                    t.value.toLowerCase().includes(q)
+                  );
+                })
+                .map((tag) => (
+                  <div
+                    key={tag.id}
+                    className="p-5 bg-[#111b21] border border-[#222e35] rounded-2xl shadow-lg flex flex-col justify-between hover:border-[#26353d] transition-all group"
+                  >
+                    <div>
+                      {/* Top Header of Tag Card */}
+                      <div className="flex items-center justify-between gap-2 mb-3">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono text-sm font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/30">
+                            {tag.name}
+                          </span>
+                          {tag.isSystem ? (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-400 font-semibold">
+                              Nativa do Sistema
+                            </span>
+                          ) : (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-teal-500/15 border border-teal-500/30 text-teal-300 font-semibold">
+                              Personalizada
+                            </span>
+                          )}
+                        </div>
+
+                        <span
+                          className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${
+                            tag.type === "action"
+                              ? "bg-purple-500/15 text-purple-300 border-purple-500/30"
+                              : "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                          }`}
+                        >
+                          {tag.type === "action" ? "Gatilho de Ação" : "Variável de Texto"}
+                        </span>
+                      </div>
+
+                      {/* Description */}
+                      <p className="text-xs text-[#e9edef] leading-relaxed mb-3">
+                        {tag.description}
+                      </p>
+
+                      {/* Value box */}
+                      <div className="p-2.5 bg-[#182229] border border-[#26353d] rounded-xl text-xs space-y-1 mb-4">
+                        <span className="text-[10px] text-[#8696a0] block uppercase tracking-wider font-semibold">
+                          {tag.type === "action" ? "Comportamento da Ação:" : "Substituição no Prompt:"}
+                        </span>
+                        <code className="text-xs text-white font-mono break-all block">
+                          {tag.value || "—"}
+                        </code>
+                      </div>
+                    </div>
+
+                    {/* Bottom Actions */}
+                    <div className="pt-3 border-t border-[#222e35] flex items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleCopyTagToken(tag.name, tag.id)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#202c33] hover:bg-[#26353d] text-white text-xs font-medium transition-colors"
+                        title="Copiar token da tag"
+                      >
+                        {copiedTagId === tag.id ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-400 stroke-[3]" />
+                            <span className="text-emerald-400">Copiado!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5 text-[#8696a0]" />
+                            <span>Copiar Tag</span>
+                          </>
+                        )}
+                      </button>
+
+                      {!tag.isSystem ? (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditTagModal(tag)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#202c33] hover:bg-[#26353d] text-[#8696a0] hover:text-white text-xs transition-colors"
+                            title="Editar tag"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                            <span>Editar</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteTag(tag.id)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs transition-colors"
+                            title="Excluir tag"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Excluir</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-[#8696a0]/60 italic">
+                          Protegida pelo sistema
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+            </div>
+
+            {/* Modal de Criação / Edição de Tag */}
+            {isTagModalOpen && (
+              <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="bg-[#111b21] border border-[#222e35] rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                  <div className="p-5 border-b border-[#222e35] flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Tag className="w-5 h-5 text-emerald-400" />
+                      <h3 className="text-sm font-bold text-white">
+                        {editingTag ? `Editar Tag: ${editingTag.name}` : "Criar Nova Tag"}
+                      </h3>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsTagModalOpen(false)}
+                      className="p-1.5 text-[#8696a0] hover:text-white rounded-lg hover:bg-[#202c33] transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleSaveTag} className="p-6 space-y-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-white mb-1.5">
+                        Nome da Tag / Token
+                      </label>
+                      <input
+                        type="text"
+                        value={tagNameInput}
+                        onChange={(e) => setTagNameInput(e.target.value)}
+                        placeholder="Ex: [CHAVE_PIX] ou CHAVE_PIX"
+                        required
+                        className="w-full px-4 py-2.5 bg-[#202c33] border border-[#26353d] focus:border-emerald-500 rounded-xl text-sm text-white font-mono outline-none"
+                      />
+                      <p className="text-[11px] text-[#8696a0] mt-1">
+                        Os colchetes <code className="text-emerald-400 font-mono">[ ]</code> serão adicionados automaticamente se você não colocar.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-white mb-1.5">
+                        Tipo da Tag
+                      </label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setTagTypeInput("variable")}
+                          className={`p-3 rounded-xl border text-left transition-all ${
+                            tagTypeInput === "variable"
+                              ? "bg-emerald-500/10 border-emerald-500 text-white"
+                              : "bg-[#202c33] border-[#26353d] text-[#8696a0] hover:border-[#3b4a54]"
+                          }`}
+                        >
+                          <span className="text-xs font-bold block text-white">Variável de Texto</span>
+                          <span className="text-[11px] text-[#8696a0] mt-0.5 block">
+                            Substitui texto no prompt pelo valor configurado
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setTagTypeInput("action")}
+                          className={`p-3 rounded-xl border text-left transition-all ${
+                            tagTypeInput === "action"
+                              ? "bg-purple-500/10 border-purple-500 text-white"
+                              : "bg-[#202c33] border-[#26353d] text-[#8696a0] hover:border-[#3b4a54]"
+                          }`}
+                        >
+                          <span className="text-xs font-bold block text-white">Ação / Informativa</span>
+                          <span className="text-[11px] text-[#8696a0] mt-0.5 block">
+                            Gatilho ou diretriz de comportamento para a IA
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-white mb-1.5">
+                        Descrição / Finalidade
+                      </label>
+                      <input
+                        type="text"
+                        value={tagDescInput}
+                        onChange={(e) => setTagDescInput(e.target.value)}
+                        placeholder="Ex: Chave PIX do atendente para envio manual ou instrução"
+                        required
+                        className="w-full px-4 py-2.5 bg-[#202c33] border border-[#26353d] focus:border-emerald-500 rounded-xl text-sm text-white outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-white mb-1.5">
+                        Valor / Texto de Substituição no Prompt
+                      </label>
+                      <textarea
+                        rows={3}
+                        value={tagValueInput}
+                        onChange={(e) => setTagValueInput(e.target.value)}
+                        placeholder="Ex: pix@empresa.com ou Qualquer texto que a tag deve injetar no prompt"
+                        className="w-full px-4 py-2.5 bg-[#202c33] border border-[#26353d] focus:border-emerald-500 rounded-xl text-sm text-white font-mono outline-none resize-none"
+                      />
+                      <p className="text-[11px] text-[#8696a0] mt-1">
+                        Sempre que esta tag aparecer no System Prompt, ela será trocada por este texto antes de consultar a IA.
+                      </p>
+                    </div>
+
+                    <div className="pt-3 border-t border-[#222e35] flex items-center justify-end gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setIsTagModalOpen(false)}
+                        className="px-4 py-2 bg-[#202c33] hover:bg-[#26353d] text-[#8696a0] hover:text-white rounded-xl text-xs font-medium transition-colors"
+                      >
+                        Cancelar
+                      </button>
+
+                      <button
+                        type="submit"
+                        className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-medium transition-all shadow-md shadow-emerald-950"
+                      >
+                        {editingTag ? "Salvar Alterações" : "Criar Tag"}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab 5: Mídias & Instruções de Uso na IA */}
         {activeTab === "media" && (
           <div className="space-y-6 animate-in fade-in duration-200">
             {/* General Media Instructions Card */}
@@ -1716,7 +2152,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Tab 5: Product & Payment Settings */}
+        {/* Tab 6: Product & Payment Settings */}
         {activeTab === "product" && (
           <div className="space-y-6 animate-in fade-in duration-200">
             <div className="bg-[#111b21] border border-[#222e35] rounded-2xl p-6 shadow-xl space-y-5">
@@ -1844,7 +2280,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Tab 6: Stats & Audit */}
+        {/* Tab 7: Stats & Audit */}
         {activeTab === "stats" && (
           <div className="space-y-6 animate-in fade-in duration-200">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

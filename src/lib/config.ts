@@ -9,6 +9,50 @@ export interface MediaItem {
   viewOnce?: boolean; // Se true, o cliente só pode abrir e visualizar a foto 1 única vez
 }
 
+export interface PromptTag {
+  id: string; // identificador único
+  name: string; // Token formatado, ex: "[NOME]", "[CHAVE_PIX]"
+  description: string; // Explicação de uso
+  value: string; // Texto que substitui no prompt ou ação executada
+  type: "variable" | "action"; // 'variable' = substitui texto no prompt; 'action' = gatilho de controle
+  isSystem?: boolean; // Tags nativas do sistema protegidas
+}
+
+export const SYSTEM_DEFAULT_TAGS: PromptTag[] = [
+  {
+    id: "tag_nome",
+    name: "[NOME]",
+    description: "Substitui automaticamente pelo nome do atendente configurado.",
+    value: "Dinâmico (Nome do Atendente)",
+    type: "variable",
+    isSystem: true,
+  },
+  {
+    id: "tag_tempo",
+    name: "[TEMPO]",
+    description: "Substitui automaticamente pelo tempo pós-venda configurado (em minutos).",
+    value: "Dinâmico (Minutos Pós-Venda)",
+    type: "variable",
+    isSystem: true,
+  },
+  {
+    id: "tag_gerar_pagamento",
+    name: "[GERAR_PAGAMENTO]",
+    description: "Gatilho de checkout: aciona a emissão automática do card PIX com QR Code.",
+    value: "Gatilho de Ação Automático",
+    type: "action",
+    isSystem: true,
+  },
+  {
+    id: "tag_encerrar_conversa",
+    name: "[ENCERRAR_CONVERSA]",
+    description: "Gatilho de encerramento: encerra o atendimento com desculpa do namorado e ativa cooldown.",
+    value: "Gatilho de Ação Automático",
+    type: "action",
+    isSystem: true,
+  },
+];
+
 export interface AppConfigData {
   id: string;
   slug?: string;
@@ -29,6 +73,7 @@ export interface AppConfigData {
   paymentWebhookSecret: string;
   mediaCatalog: string; // JSON string of MediaItem[]
   mediaInstructions: string;
+  customTags?: string; // JSON string of PromptTag[]
   maxAgentPhotos: number;
   postPurchaseMinutes: number;
   nonPurchaseMinutes: number;
@@ -79,6 +124,7 @@ export const DEFAULT_CONFIG: AppConfigData = {
   paymentWebhookSecret: "",
   mediaCatalog: "[]",
   mediaInstructions: DEFAULT_MEDIA_INSTRUCTIONS,
+  customTags: "[]",
   maxAgentPhotos: 3,
   postPurchaseMinutes: 10,
   nonPurchaseMinutes: 15,
@@ -106,6 +152,7 @@ function mapAttendantToConfig(attendant: any): AppConfigData {
     paymentWebhookSecret: attendant.paymentWebhookSecret || "",
     mediaCatalog: attendant.mediaCatalog || "[]",
     mediaInstructions: attendant.mediaInstructions || DEFAULT_CONFIG.mediaInstructions,
+    customTags: attendant.customTags || attendant.custom_tags || "[]",
     maxAgentPhotos: attendant.maxAgentPhotos ?? 3,
     postPurchaseMinutes: attendant.postPurchaseMinutes ?? 10,
     nonPurchaseMinutes: attendant.nonPurchaseMinutes ?? 15,

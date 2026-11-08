@@ -52,6 +52,7 @@ export async function ensureDatabaseSchema() {
         "payment_webhook_secret" TEXT NOT NULL DEFAULT '',
         "media_catalog" TEXT NOT NULL DEFAULT '[]',
         "media_instructions" TEXT NOT NULL DEFAULT '',
+        "custom_tags" TEXT NOT NULL DEFAULT '[]',
         "max_agent_photos" INTEGER NOT NULL DEFAULT 3,
         "post_purchase_minutes" INTEGER NOT NULL DEFAULT 10,
         "non_purchase_minutes" INTEGER NOT NULL DEFAULT 15,
@@ -129,6 +130,7 @@ export async function ensureDatabaseSchema() {
         "payment_webhook_secret" TEXT NOT NULL DEFAULT '',
         "media_catalog" TEXT NOT NULL DEFAULT '[]',
         "media_instructions" TEXT NOT NULL DEFAULT '',
+        "custom_tags" TEXT NOT NULL DEFAULT '[]',
         "max_agent_photos" INTEGER NOT NULL DEFAULT 3,
         "post_purchase_minutes" INTEGER NOT NULL DEFAULT 10,
         "non_purchase_minutes" INTEGER NOT NULL DEFAULT 15,
@@ -152,6 +154,8 @@ export async function ensureDatabaseSchema() {
       { table: "orders", column: "attendant_slug", sql: `ALTER TABLE "orders" ADD COLUMN "attendant_slug" TEXT` },
       { table: "attendants", column: "bio", sql: `ALTER TABLE "attendants" ADD COLUMN "bio" TEXT DEFAULT 'Especialista em Vendas e Atendimento'` },
       { table: "attendants", column: "is_active", sql: `ALTER TABLE "attendants" ADD COLUMN "is_active" BOOLEAN DEFAULT 1` },
+      { table: "attendants", column: "custom_tags", sql: `ALTER TABLE "attendants" ADD COLUMN "custom_tags" TEXT DEFAULT '[]'` },
+      { table: "app_configs", column: "custom_tags", sql: `ALTER TABLE "app_configs" ADD COLUMN "custom_tags" TEXT DEFAULT '[]'` },
     ];
 
     for (const item of requiredColumns) {

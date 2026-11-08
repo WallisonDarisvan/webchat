@@ -20,6 +20,14 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const attendantId = searchParams.get("attendantId") || searchParams.get("slug") || undefined;
     const config = await getAppConfig(attendantId);
+    try {
+      if (config.id && config.id !== "global") {
+        const rows: any[] = await prisma.$queryRawUnsafe(`SELECT custom_tags FROM attendants WHERE id = ?`, config.id);
+        if (rows?.[0]?.custom_tags) {
+          config.customTags = rows[0].custom_tags;
+        }
+      }
+    } catch {}
     return NextResponse.json({ success: true, config });
   } catch (error) {
     console.error("Error in GET /api/admin/config:", error);
@@ -75,6 +83,23 @@ export async function PUT(req: NextRequest) {
         },
       });
 
+      if (typeof data.customTags !== "undefined") {
+        const customTagsStr = typeof data.customTags === "string" ? data.customTags : JSON.stringify(data.customTags || []);
+        try {
+          await prisma.$executeRawUnsafe(
+            `UPDATE attendants SET custom_tags = ? WHERE id = ?`,
+            customTagsStr,
+            existingAttendant.id
+          );
+        } catch (err) {
+          console.warn("Could not update custom_tags:", err);
+        }
+      }
+
+      const customTagsVal = typeof data.customTags !== "undefined"
+        ? (typeof data.customTags === "string" ? data.customTags : JSON.stringify(data.customTags))
+        : "[]";
+
       return NextResponse.json({
         success: true,
         config: {
@@ -82,11 +107,18 @@ export async function PUT(req: NextRequest) {
           agentName: updatedAttendant.name,
           agentAvatar: updatedAttendant.avatar,
           productPrice: Number(updatedAttendant.productPrice),
+          customTags: customTagsVal,
         },
       });
     }
 
     // Fallback: update legacy app_configs
+    if (typeof data.customTags !== "undefined") {
+      const customTagsStr = typeof data.customTags === "string" ? data.customTags : JSON.stringify(data.customTags || []);
+      try {
+        await prisma.$executeRawUnsafe(`UPDATE app_configs SET custom_tags = ? WHERE id = 'global'`, customTagsStr);
+      } catch {}
+    }
     const updated = await prisma.appConfig.upsert({
       where: { id: "global" },
       update: {

@@ -74,10 +74,26 @@ async function processSessionAI(sessionId: string) {
 
     const cfg = await getAppConfig();
     const paidOrder = session.orders.find((o) => o.status === "paid");
+    const pendingOrder = session.orders.find((o) => o.status === "pending");
     const now = new Date();
     let systemDirective: string | undefined = undefined;
     let shouldLockAfterResponse = false;
     let lockReason: string | undefined = undefined;
+
+    // Find the latest user message and image first
+    const lastUserMessageObj = [...session.messages].reverse().find((m) => m.sender === "user");
+    const lastUserMessage = lastUserMessageObj ? lastUserMessageObj.content : "";
+    let lastUserImageUrl: string | undefined = undefined;
+    if (lastUserMessageObj?.metadata) {
+      if (typeof lastUserMessageObj.metadata === "object") {
+        lastUserImageUrl = (lastUserMessageObj.metadata as any)?.imageUrl;
+      } else if (typeof lastUserMessageObj.metadata === "string") {
+        try {
+          const parsed = JSON.parse(lastUserMessageObj.metadata);
+          lastUserImageUrl = parsed?.imageUrl;
+        } catch {}
+      }
+    }
 
     // Check if session was previously locked, but 24h passed and user just sent a message (return scenario)
     const wasLocked = Boolean(session.lockedUntil && new Date(session.lockedUntil) <= now);
@@ -85,7 +101,7 @@ async function processSessionAI(sessionId: string) {
       if (paidOrder) {
         systemDirective = "O cliente voltou após a compra. Cumprimente-o como se fosse o dia seguinte, pergunte se ele gostou das fotinhas e continue o flerte casual.";
       } else {
-        systemDirective = "O cliente voltou no outro dia sem ter comprado. Retome o flerte, provoque ele e tente fechar a venda das fotinhas completas novamente.";
+        systemDirective = "O cliente voltou no outro dia sem ter comprado. Retome o flerte, provoque ele e tente fechar a venda das fotinhas completas novamente com [GERAR_PAGAMENTO].";
       }
       // Clear the expired lock and record return handled
       await prisma.chatSession.update({
@@ -97,26 +113,56 @@ async function processSessionAI(sessionId: string) {
       });
     }
 
-    // If not returning from a 24h lock, evaluate if exit time has arrived
+    // If not returning from a 24h lock, evaluate the 3 specific exit triggers:
     if (!systemDirective) {
       if (paidOrder) {
-        // Customer paid: check if post-purchase time has elapsed
+        // Cenário 1: Cliente COMPROU - conversa por 10 minutos (postPurchaseMinutes) pós-PIX
         const paidAt = paidOrder.paidAt || paidOrder.updatedAt;
         const minutesSincePayment = (now.getTime() - new Date(paidAt).getTime()) / (1000 * 60);
         const maxPostPurchase = cfg.postPurchaseMinutes || 10;
         if (minutesSincePayment >= maxPostPurchase) {
-          systemDirective = "O tempo de conversa pós-venda acabou. Use a desculpa do namorado para encerrar a conversa agora.";
+          systemDirective = `O tempo de conversa pós-venda acabou (passaram-se mais de ${Math.round(minutesSincePayment)} minutos desde o pagamento). Use a desculpa do namorado que acabou de chegar para encerrar a conversa agora, diga que volta amanhã e adicione a tag [ENCERRAR_CONVERSA].`;
           shouldLockAfterResponse = true;
           lockReason = "post_purchase_ended";
         }
       } else {
-        // Customer did not pay: check if non-purchase time has elapsed
-        const minutesSinceStart = (now.getTime() - new Date(session.createdAt).getTime()) / (1000 * 60);
-        const maxNonPurchase = cfg.nonPurchaseMinutes || 15;
-        if (minutesSinceStart >= maxNonPurchase) {
-          systemDirective = "O tempo acabou. Use a desculpa do namorado para encerrar a conversa e peça para ele chamar amanhã.";
-          shouldLockAfterResponse = true;
-          lockReason = "abandoned_ended";
+        // Cenário 2: Cliente NÃO COMPROU - a conversa flui ativamente, EXCETO sob 3 gatilhos:
+
+        // GATILHO 3: O cliente está demorando para fechar após o envio do PIX (>= 5 min esperando PIX pendente)
+        if (pendingOrder) {
+          const minutesSincePix = (now.getTime() - new Date(pendingOrder.createdAt).getTime()) / (1000 * 60);
+          if (minutesSincePix >= 5) {
+            systemDirective = `A cobrança PIX foi gerada há mais de ${Math.round(minutesSincePix)} minutos e o cliente ainda não pagou. Use a desculpa do namorado que acabou de chegar para encerrar a conversa agora, avise que volta amanhã e adicione a tag [ENCERRAR_CONVERSA].`;
+            shouldLockAfterResponse = true;
+            lockReason = "pix_timeout_ended";
+          }
+        }
+
+        // GATILHO 1: O cliente não falou durante um tempo (inatividade prolongada entre as mensagens)
+        if (!systemDirective) {
+          const userMessages = session.messages.filter((m) => m.sender === "user");
+          if (userMessages.length >= 2) {
+            const currentMsg = userMessages[userMessages.length - 1];
+            const prevMsg = userMessages[userMessages.length - 2];
+            const silenceMinutes = (new Date(currentMsg.createdAt).getTime() - new Date(prevMsg.createdAt).getTime()) / (1000 * 60);
+            const maxInactivity = cfg.nonPurchaseMinutes || 15;
+            if (silenceMinutes >= maxInactivity) {
+              systemDirective = `O cliente ficou sem falar durante ${Math.round(silenceMinutes)} minutos e voltou só agora. Como ele demorou muito para responder, use a desculpa do namorado que acabou de chegar para encerrar a conversa agora, avise que volta amanhã e adicione a tag [ENCERRAR_CONVERSA].`;
+              shouldLockAfterResponse = true;
+              lockReason = "abandoned_inactivity";
+            }
+          }
+        }
+
+        // GATILHO 2: O cliente não quer (recusa explícita de compra)
+        if (!systemDirective) {
+          const lowerUserMsg = lastUserMessage.toLowerCase();
+          const rejectionPattern = /(não\s+quero|nao\s+quero|não\s+vou\s+pagar|nao\s+vou\s+pagar|tá\s+caro|ta\s+caro|muito\s+caro|deixa\s+pra\s+l[aá]|não\s+tenho\s+dinheiro|nao\s+tenho\s+dinheiro|nem\s+pensar|não\s+vou\s+comprar|nao\s+vou\s+comprar|valeu\s+mas\s+não|valeu\s+mas\s+nao)/i;
+          if (rejectionPattern.test(lowerUserMsg)) {
+            systemDirective = "O cliente acabou de recusar a compra e disse que não quer comprar. Use a desculpa do namorado para encerrar a conversa de forma descontraída, diga que vocês conversam amanhã e adicione a tag [ENCERRAR_CONVERSA].";
+            shouldLockAfterResponse = true;
+            lockReason = "customer_rejected";
+          }
         }
       }
     }
@@ -144,21 +190,6 @@ async function processSessionAI(sessionId: string) {
         imageUrl,
       };
     });
-
-    // Find the latest user message and image
-    const lastUserMessageObj = [...session.messages].reverse().find((m) => m.sender === "user");
-    const lastUserMessage = lastUserMessageObj ? lastUserMessageObj.content : "";
-    let lastUserImageUrl: string | undefined = undefined;
-    if (lastUserMessageObj?.metadata) {
-      if (typeof lastUserMessageObj.metadata === "object") {
-        lastUserImageUrl = (lastUserMessageObj.metadata as any)?.imageUrl;
-      } else if (typeof lastUserMessageObj.metadata === "string") {
-        try {
-          const parsed = JSON.parse(lastUserMessageObj.metadata);
-          lastUserImageUrl = parsed?.imageUrl;
-        } catch {}
-      }
-    }
 
     // Generate AI response considering the entire grouped context and multimodal images
     const aiResult = await generateAIResponse({
@@ -277,15 +308,16 @@ async function processSessionAI(sessionId: string) {
       sessionEvents.broadcast(sessionId, "new_message", paymentMessage);
     }
 
-    // If exit trigger was executed (boyfriend excuse), lock the session for cooldownHours
-    if (shouldLockAfterResponse) {
+    // If exit trigger was executed (either flagged by director OR emitted by AI with [ENCERRAR_CONVERSA])
+    if (shouldLockAfterResponse || aiResult.shouldEndConversation) {
       const cooldownHours = cfg.cooldownHours || 24;
       const lockedUntil = new Date(Date.now() + cooldownHours * 60 * 60 * 1000);
+      const finalReason = lockReason || "ended_by_agent";
       await prisma.chatSession.update({
         where: { id: sessionId },
         data: {
           lockedUntil,
-          lockReason,
+          lockReason: finalReason,
           returnHandled: false,
         },
       });
@@ -293,7 +325,7 @@ async function processSessionAI(sessionId: string) {
       sessionEvents.broadcast(sessionId, "agent_status", {
         isOnline: false,
         lockedUntil,
-        reason: lockReason,
+        reason: finalReason,
       });
     }
   } catch (err) {

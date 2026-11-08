@@ -30,7 +30,7 @@ export function ChatFeed({
   }, [messages, isTyping]);
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3 chat-wallpaper">
+    <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3 chat-wallpaper custom-scrollbar">
       {/* Security Banner */}
       <div className="flex justify-center my-2">
         <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#182229]/90 border border-[#222e35] rounded-lg text-center text-xs text-[#8696a0] max-w-sm shadow-sm">

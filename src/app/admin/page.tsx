@@ -933,7 +933,7 @@ export default function AdminPage() {
 
                   <div>
                     <label className="block text-xs font-medium text-[#8696a0] mb-1">
-                      Tempo Máximo (Não Comprou)
+                      Tempo de Inatividade
                     </label>
                     <div className="flex items-center gap-2">
                       <input
@@ -952,7 +952,7 @@ export default function AdminPage() {
                       <span className="text-xs text-[#8696a0]">minutos</span>
                     </div>
                     <p className="text-[11px] text-[#8696a0] mt-1">
-                      Tempo limite se o visitante não gerar o pagamento.
+                      Tempo de silêncio do cliente para acionar a despedida por inatividade.
                     </p>
                   </div>
 
@@ -984,6 +984,9 @@ export default function AdminPage() {
 
                 <div className="p-2.5 bg-[#202c33]/70 rounded-lg text-[11px] text-[#8696a0] space-y-1">
                   <p>
+                    • <strong>3 Gatilhos Inteligentes:</strong> O atendimento sem compra só é encerrado se o cliente sumir por inatividade, se recusar expressamente a compra, ou se demorar mais de 5 minutos para pagar o PIX gerado. Conversas ativas nunca são cortadas!
+                  </p>
+                  <p>
                     • <strong>Tag [TEMPO]:</strong> Substituída automaticamente por{" "}
                     <code className="text-teal-400 font-mono">
                       {config.postPurchaseMinutes ?? 10} minutos
@@ -991,7 +994,7 @@ export default function AdminPage() {
                     no prompt da IA.
                   </p>
                   <p>
-                    • <strong>Retorno no Dia Seguinte:</strong> Após o período de bloqueio, quando o cliente mandar mensagem, o backend injeta a instrução secreta apropriada (se comprou: pergunta se gostou das fotinhas; se não comprou: volta a provocar e tenta fechar a venda).
+                    • <strong>Retorno no Dia Seguinte:</strong> Após o período de bloqueio (24h), quando o cliente mandar mensagem, o backend injeta a instrução secreta apropriada (se comprou: pergunta se gostou das fotinhas; se não comprou: volta a provocar e tenta fechar a venda).
                   </p>
                 </div>
               </div>

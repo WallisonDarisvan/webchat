@@ -12,6 +12,7 @@ export interface AIResponseResult {
   bubbles: string[];
   shouldGeneratePayment: boolean;
   mediaIdToSend: string | null;
+  shouldEndConversation: boolean;
   isFallback: boolean;
 }
 
@@ -34,7 +35,7 @@ export async function generateAIResponse(params: {
   let mediaCatalogItems: MediaItem[] = [];
   try {
     mediaCatalogItems = JSON.parse(config.mediaCatalog || "[]");
-  } catch {}
+  } catch { }
 
   // If no API key configured, use a sensible simulation/contingency mode
   if (!config.aiApiKey) {
@@ -70,13 +71,12 @@ ${config.mediaInstructions || DEFAULT_MEDIA_INSTRUCTIONS}
 
 Mídias que você tem permissão de enviar:
 ${mediaCatalogItems
-  .map(
-    (m) =>
-      `- Mídia [ID: ${m.id}]: "${m.title}". ${
-        m.description ? `Detalhes: ${m.description}. ` : ""
-      }Instrução de Disparo: ${m.triggerInstruction}. Para enviar esta imagem ao cliente, adicione exatamente no final do seu texto a tag: [ENVIAR_MIDIA:${m.id}]`
-  )
-  .join("\n")}`;
+        .map(
+          (m) =>
+            `- Mídia [ID: ${m.id}]: "${m.title}". ${m.description ? `Detalhes: ${m.description}. ` : ""
+            }Instrução de Disparo: ${m.triggerInstruction}. Para enviar esta imagem ao cliente, adicione exatamente no final do seu texto a tag: [ENVIAR_MIDIA:${m.id}]`
+        )
+        .join("\n")}`;
   }
 
   // Replace [NOME] and [TEMPO] variables
@@ -109,6 +109,7 @@ Informações do atendente, visitante e contexto atual:
       const cleanContent = h.content
         .replace(/\[GERAR_PAGAMENTO\]/g, "")
         .replace(/\[ENVIAR_MIDIA:[^\]]+\]/g, "")
+        .replace(/\[ENCERRAR_CONVERSA\]/g, "")
         .trim();
 
       if (h.sender === "user" && h.imageUrl) {
@@ -148,6 +149,7 @@ Informações do atendente, visitante e contexto atual:
       bubbles: [],
       shouldGeneratePayment: false,
       mediaIdToSend: null,
+      shouldEndConversation: false,
       isFallback: false,
     };
   }
@@ -207,13 +209,14 @@ Informações do atendente, visitante e contexto atual:
       bubbles: splitIntoBubbles(fallbackText),
       shouldGeneratePayment: false,
       mediaIdToSend: null,
+      shouldEndConversation: false,
       isFallback: true,
     };
   }
 }
 
 /**
- * Process raw AI text: inspect control tags [GERAR_PAGAMENTO] & [ENVIAR_MIDIA:id]
+ * Process raw AI text: inspect control tags [GERAR_PAGAMENTO], [ENVIAR_MIDIA:id], [ENCERRAR_CONVERSA]
  */
 function processAIContent(rawContent: string): AIResponseResult {
   const paymentTagRegex = /\[GERAR_PAGAMENTO\]/i;
@@ -223,10 +226,14 @@ function processAIContent(rawContent: string): AIResponseResult {
   const mediaMatch = rawContent.match(mediaTagRegex);
   const mediaIdToSend = mediaMatch ? mediaMatch[1] : null;
 
+  const endTagRegex = /\[ENCERRAR_CONVERSA\]/i;
+  const shouldEndConversation = endTagRegex.test(rawContent);
+
   // Clean tags out of user-facing text
   const cleanedText = rawContent
     .replace(paymentTagRegex, "")
     .replace(mediaTagRegex, "")
+    .replace(endTagRegex, "")
     .trim();
 
   // Split into 1 to 3 conversational bubbles
@@ -237,6 +244,7 @@ function processAIContent(rawContent: string): AIResponseResult {
     bubbles: bubbles.length > 0 ? bubbles : [cleanedText],
     shouldGeneratePayment,
     mediaIdToSend,
+    shouldEndConversation,
     isFallback: false,
   };
 }

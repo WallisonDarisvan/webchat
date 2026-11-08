@@ -3,19 +3,26 @@ import { prisma, ensureDatabaseSchema } from "@/lib/prisma";
 import { generateAIResponse } from "@/lib/ai";
 import { getAppConfig } from "@/lib/config";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const cfg = await getAppConfig();
+    const { searchParams } = new URL(req.url);
+    const slug = searchParams.get("slug") || searchParams.get("attendant");
+    const cfg = await getAppConfig(slug || undefined);
     return NextResponse.json({
       success: true,
       agentName: cfg.agentName || "Gabriel Siqueira",
       agentAvatar: cfg.agentAvatar || "",
+      bio: cfg.bio || "Especialista em Vendas e Atendimento",
+      slug: cfg.slug || "gabriel",
+      productName: cfg.productName,
+      productPrice: cfg.productPrice,
     });
   } catch {
     return NextResponse.json({
       success: true,
       agentName: "Gabriel Siqueira",
       agentAvatar: "",
+      slug: "gabriel",
     });
   }
 }
@@ -24,11 +31,14 @@ export async function POST(req: NextRequest) {
   try {
     await ensureDatabaseSchema();
     const body = await req.json();
-    const { deviceId, userName } = body;
+    const { deviceId, userName, attendantSlug } = body;
 
     if (!deviceId) {
       return NextResponse.json({ error: "deviceId is required" }, { status: 400 });
     }
+
+    // Resolve attendant config
+    const attendant = await getAppConfig(attendantSlug || undefined);
 
     // Extract real IP from proxy / Cloudflare headers
     const ip =
@@ -39,9 +49,16 @@ export async function POST(req: NextRequest) {
 
     const userAgent = req.headers.get("user-agent") || "unknown";
 
-    // Check if session exists
-    let session = await prisma.chatSession.findUnique({
-      where: { deviceId },
+    // Check if session exists for this device and attendant
+    let session = await prisma.chatSession.findFirst({
+      where: {
+        deviceId,
+        OR: [
+          { attendantSlug: attendant.slug },
+          { attendantId: attendant.id },
+          ...(attendant.slug === "gabriel" ? [{ attendantSlug: null }] : []),
+        ],
+      },
       include: {
         messages: {
           orderBy: { createdAt: "asc" },
@@ -57,12 +74,14 @@ export async function POST(req: NextRequest) {
 
     if (session) {
       isReturning = true;
-      // Update IP and userAgent
+      // Update IP, userAgent and bind attendant
       session = await prisma.chatSession.update({
         where: { id: session.id },
         data: {
           lastIp: ip,
           userAgent,
+          attendantId: attendant.id,
+          attendantSlug: attendant.slug,
           ...(userName ? { userName } : {}),
         },
         include: {
@@ -76,11 +95,13 @@ export async function POST(req: NextRequest) {
         },
       });
     } else {
-      // 1. Create brand new session
+      // 1. Create brand new session bound to this attendant
       const cleanName = userName?.trim() || "Visitante";
       const createdSession = await prisma.chatSession.create({
         data: {
           deviceId,
+          attendantId: attendant.id,
+          attendantSlug: attendant.slug,
           userName: cleanName,
           lastIp: ip,
           userAgent,
@@ -92,6 +113,7 @@ export async function POST(req: NextRequest) {
         userName: cleanName,
         history: [],
         userMessage: `[O visitante acabou de entrar no chat e informou que se chama "${cleanName}". Dê as boas-vindas a ele em primeira pessoa, de forma calorosa, humana e descontraída, como uma pessoa real digitando no WhatsApp, iniciando o atendimento de forma envolvente.]`,
+        attendantId: attendant.id,
       });
 
       // 3. Save AI greeting bubbles in DB
@@ -141,15 +163,15 @@ export async function POST(req: NextRequest) {
       return msg;
     });
 
-    const cfg = await getAppConfig();
     const isLocked = Boolean(session.lockedUntil && new Date(session.lockedUntil) > new Date());
 
     return NextResponse.json({
       success: true,
-      agentName: cfg.agentName || "Gabriel Siqueira",
-      agentAvatar: cfg.agentAvatar || "",
+      agentName: attendant.agentName,
+      agentAvatar: attendant.agentAvatar,
       isOnline: !isLocked,
       lockedUntil: session.lockedUntil,
+      attendantSlug: attendant.slug,
       session: {
         id: session.id,
         deviceId: session.deviceId,

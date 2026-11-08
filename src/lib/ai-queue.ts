@@ -72,7 +72,8 @@ async function processSessionAI(sessionId: string) {
       return;
     }
 
-    const cfg = await getAppConfig();
+    const attendantIdent = (session as any).attendantId || (session as any).attendantSlug;
+    const cfg = await getAppConfig(attendantIdent);
     const paidOrder = session.orders.find((o) => o.status === "paid");
     const pendingOrder = session.orders.find((o) => o.status === "pending");
     const now = new Date();
@@ -198,6 +199,7 @@ async function processSessionAI(sessionId: string) {
       userMessage: lastUserMessage,
       imageUrl: lastUserImageUrl,
       systemDirective,
+      attendantId: attendantIdent,
     });
 
     // Deliver multi-bubbles with human typing pace
@@ -229,7 +231,8 @@ async function processSessionAI(sessionId: string) {
     // If media trigger tag [ENVIAR_MIDIA:id] was detected, send the media photo
     if (aiResult.mediaIdToSend) {
       try {
-        const cfg = await getAppConfig();
+        const attendantIdent = (session as any).attendantId || (session as any).attendantSlug;
+    const cfg = await getAppConfig(attendantIdent);
         const maxAllowed = typeof cfg.maxAgentPhotos === "number" ? cfg.maxAgentPhotos : 3;
 
         // Hard backend check: count how many media photos agent has already sent in this session

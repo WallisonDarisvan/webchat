@@ -11,6 +11,9 @@ export interface MediaItem {
 
 export interface AppConfigData {
   id: string;
+  slug?: string;
+  bio?: string;
+  isActive?: boolean;
   aiBaseUrl: string;
   aiApiKey: string;
   aiModel: string;
@@ -58,6 +61,9 @@ export const DEFAULT_MEDIA_INSTRUCTIONS = `Diretrizes de Envio de Mídias para a
 
 export const DEFAULT_CONFIG: AppConfigData = {
   id: "global",
+  slug: "gabriel",
+  bio: "Especialista em Vendas e Atendimento",
+  isActive: true,
   aiBaseUrl: process.env.AI_BASE_URL || "https://api.deepseek.com",
   aiApiKey: process.env.AI_API_KEY || "",
   aiModel: process.env.AI_MODEL || "deepseek-chat",
@@ -79,76 +85,117 @@ export const DEFAULT_CONFIG: AppConfigData = {
   cooldownHours: 24,
 };
 
-export async function getAppConfig(): Promise<AppConfigData> {
+function mapAttendantToConfig(attendant: any): AppConfigData {
+  return {
+    id: attendant.id,
+    slug: attendant.slug,
+    bio: attendant.bio || "Especialista em Vendas e Atendimento",
+    isActive: typeof attendant.isActive !== "undefined" ? Boolean(attendant.isActive) : true,
+    aiBaseUrl: attendant.aiBaseUrl || DEFAULT_CONFIG.aiBaseUrl,
+    aiApiKey: attendant.aiApiKey || process.env.AI_API_KEY || "",
+    aiModel: attendant.aiModel || DEFAULT_CONFIG.aiModel,
+    aiTemperature: attendant.aiTemperature ?? DEFAULT_CONFIG.aiTemperature,
+    systemPrompt: attendant.systemPrompt || DEFAULT_CONFIG.systemPrompt,
+    agentName: attendant.name || DEFAULT_CONFIG.agentName,
+    agentAvatar: attendant.avatar || "",
+    productName: attendant.productName || DEFAULT_CONFIG.productName,
+    productPrice: Number(attendant.productPrice) || DEFAULT_CONFIG.productPrice,
+    productDeliveryLink: attendant.productDeliveryLink || DEFAULT_CONFIG.productDeliveryLink,
+    paymentGateway: attendant.paymentGateway || DEFAULT_CONFIG.paymentGateway,
+    paymentGatewayToken: attendant.paymentGatewayToken || "",
+    paymentWebhookSecret: attendant.paymentWebhookSecret || "",
+    mediaCatalog: attendant.mediaCatalog || "[]",
+    mediaInstructions: attendant.mediaInstructions || DEFAULT_CONFIG.mediaInstructions,
+    maxAgentPhotos: attendant.maxAgentPhotos ?? 3,
+    postPurchaseMinutes: attendant.postPurchaseMinutes ?? 10,
+    nonPurchaseMinutes: attendant.nonPurchaseMinutes ?? 15,
+    cooldownHours: attendant.cooldownHours ?? 24,
+  };
+}
+
+export async function getAllAttendants(onlyActive = false): Promise<AppConfigData[]> {
   try {
     await ensureDatabaseSchema();
-    const config = await prisma.appConfig.findUnique({
+    const where = onlyActive ? { isActive: true } : {};
+    const list = await prisma.attendant.findMany({
+      where,
+      orderBy: { createdAt: "asc" },
+    });
+    return list.map(mapAttendantToConfig);
+  } catch (err) {
+    console.warn("getAllAttendants fallback:", err);
+    return [DEFAULT_CONFIG];
+  }
+}
+
+export async function getAppConfig(identifier?: string): Promise<AppConfigData> {
+  try {
+    await ensureDatabaseSchema();
+
+    // 1. If identifier provided, lookup by slug or id
+    if (identifier) {
+      const found = await prisma.attendant.findFirst({
+        where: {
+          OR: [{ id: identifier }, { slug: identifier }],
+        },
+      });
+      if (found) {
+        return mapAttendantToConfig(found);
+      }
+    }
+
+    // 2. Otherwise get the first active attendant
+    const firstActive = await prisma.attendant.findFirst({
+      where: { isActive: true },
+      orderBy: { createdAt: "asc" },
+    });
+    if (firstActive) {
+      return mapAttendantToConfig(firstActive);
+    }
+
+    // 3. Fallback to any attendant
+    const anyAttendant = await prisma.attendant.findFirst({
+      orderBy: { createdAt: "asc" },
+    });
+    if (anyAttendant) {
+      return mapAttendantToConfig(anyAttendant);
+    }
+
+    // 4. Fallback to legacy app_configs or DEFAULT_CONFIG
+    const legacy = await prisma.appConfig.findUnique({
       where: { id: "global" },
     });
-
-    if (config) {
+    if (legacy) {
       return {
-        id: config.id,
-        aiBaseUrl: config.aiBaseUrl || DEFAULT_CONFIG.aiBaseUrl,
-        aiApiKey: config.aiApiKey || process.env.AI_API_KEY || "",
-        aiModel: config.aiModel || DEFAULT_CONFIG.aiModel,
-        aiTemperature: config.aiTemperature ?? DEFAULT_CONFIG.aiTemperature,
-        systemPrompt: config.systemPrompt || DEFAULT_CONFIG.systemPrompt,
-        agentName: config.agentName || DEFAULT_CONFIG.agentName,
-        agentAvatar: config.agentAvatar || "",
-        productName: config.productName || DEFAULT_CONFIG.productName,
-        productPrice: Number(config.productPrice) || DEFAULT_CONFIG.productPrice,
-        productDeliveryLink: config.productDeliveryLink || DEFAULT_CONFIG.productDeliveryLink,
-        paymentGateway: config.paymentGateway || DEFAULT_CONFIG.paymentGateway,
-        paymentGatewayToken: config.paymentGatewayToken || "",
-        paymentWebhookSecret: config.paymentWebhookSecret || "",
-        mediaCatalog: config.mediaCatalog || "[]",
-        mediaInstructions: config.mediaInstructions || DEFAULT_CONFIG.mediaInstructions,
-        maxAgentPhotos: config.maxAgentPhotos ?? 3,
-        postPurchaseMinutes: (config as any).postPurchaseMinutes ?? 10,
-        nonPurchaseMinutes: (config as any).nonPurchaseMinutes ?? 15,
-        cooldownHours: (config as any).cooldownHours ?? 24,
+        id: legacy.id,
+        slug: "gabriel",
+        bio: "Especialista em Vendas e Atendimento",
+        isActive: true,
+        aiBaseUrl: legacy.aiBaseUrl || DEFAULT_CONFIG.aiBaseUrl,
+        aiApiKey: legacy.aiApiKey || process.env.AI_API_KEY || "",
+        aiModel: legacy.aiModel || DEFAULT_CONFIG.aiModel,
+        aiTemperature: legacy.aiTemperature ?? DEFAULT_CONFIG.aiTemperature,
+        systemPrompt: legacy.systemPrompt || DEFAULT_CONFIG.systemPrompt,
+        agentName: legacy.agentName || DEFAULT_CONFIG.agentName,
+        agentAvatar: legacy.agentAvatar || "",
+        productName: legacy.productName || DEFAULT_CONFIG.productName,
+        productPrice: Number(legacy.productPrice) || DEFAULT_CONFIG.productPrice,
+        productDeliveryLink: legacy.productDeliveryLink || DEFAULT_CONFIG.productDeliveryLink,
+        paymentGateway: legacy.paymentGateway || DEFAULT_CONFIG.paymentGateway,
+        paymentGatewayToken: legacy.paymentGatewayToken || "",
+        paymentWebhookSecret: legacy.paymentWebhookSecret || "",
+        mediaCatalog: legacy.mediaCatalog || "[]",
+        mediaInstructions: legacy.mediaInstructions || DEFAULT_CONFIG.mediaInstructions,
+        maxAgentPhotos: legacy.maxAgentPhotos ?? 3,
+        postPurchaseMinutes: (legacy as any).postPurchaseMinutes ?? 10,
+        nonPurchaseMinutes: (legacy as any).nonPurchaseMinutes ?? 15,
+        cooldownHours: (legacy as any).cooldownHours ?? 24,
       };
     }
 
-    // Upsert default
-    const created = await prisma.appConfig.create({
-      data: {
-        id: "global",
-        aiBaseUrl: DEFAULT_CONFIG.aiBaseUrl,
-        aiApiKey: DEFAULT_CONFIG.aiApiKey,
-        aiModel: DEFAULT_CONFIG.aiModel,
-        aiTemperature: DEFAULT_CONFIG.aiTemperature,
-        systemPrompt: DEFAULT_CONFIG.systemPrompt,
-        agentName: DEFAULT_CONFIG.agentName,
-        agentAvatar: DEFAULT_CONFIG.agentAvatar,
-        productName: DEFAULT_CONFIG.productName,
-        productPrice: DEFAULT_CONFIG.productPrice,
-        productDeliveryLink: DEFAULT_CONFIG.productDeliveryLink,
-        paymentGateway: DEFAULT_CONFIG.paymentGateway,
-        paymentGatewayToken: DEFAULT_CONFIG.paymentGatewayToken,
-        paymentWebhookSecret: DEFAULT_CONFIG.paymentWebhookSecret,
-        mediaCatalog: DEFAULT_CONFIG.mediaCatalog,
-        mediaInstructions: DEFAULT_CONFIG.mediaInstructions,
-        maxAgentPhotos: DEFAULT_CONFIG.maxAgentPhotos,
-        postPurchaseMinutes: DEFAULT_CONFIG.postPurchaseMinutes,
-        nonPurchaseMinutes: DEFAULT_CONFIG.nonPurchaseMinutes,
-        cooldownHours: DEFAULT_CONFIG.cooldownHours,
-      },
-    });
-
-    return {
-      ...created,
-      productPrice: Number(created.productPrice),
-      maxAgentPhotos: created.maxAgentPhotos ?? 3,
-      agentName: created.agentName || DEFAULT_CONFIG.agentName,
-      agentAvatar: created.agentAvatar || "",
-      postPurchaseMinutes: created.postPurchaseMinutes ?? 10,
-      nonPurchaseMinutes: created.nonPurchaseMinutes ?? 15,
-      cooldownHours: created.cooldownHours ?? 24,
-    };
+    return DEFAULT_CONFIG;
   } catch (error) {
-    console.warn("Could not read AppConfig from DB, using fallback defaults:", error);
+    console.warn("Could not read attendant config from DB, using fallback defaults:", error);
     return DEFAULT_CONFIG;
   }
 }

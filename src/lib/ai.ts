@@ -28,8 +28,9 @@ export async function generateAIResponse(params: {
   userMessage: string;
   imageUrl?: string;
   systemDirective?: string;
+  attendantId?: string;
 }): Promise<AIResponseResult> {
-  const config = await getAppConfig();
+  const config = await getAppConfig(params.attendantId);
 
   // Parse media catalog
   let mediaCatalogItems: MediaItem[] = [];

@@ -32,6 +32,10 @@ import { DEFAULT_SYSTEM_PROMPT, DEFAULT_MEDIA_INSTRUCTIONS, MediaItem } from "@/
 import { optimizeImageForVision } from "@/lib/image-optimizer";
 
 interface AdminConfig {
+  id?: string;
+  slug?: string;
+  bio?: string;
+  isActive?: boolean;
   aiBaseUrl: string;
   aiApiKey: string;
   aiModel: string;
@@ -136,6 +140,14 @@ export default function AdminPage() {
   const [webhookCopied, setWebhookCopied] = useState(false);
   const [appUrl, setAppUrl] = useState("");
 
+  // Multi-attendant management state
+  const [attendantsList, setAttendantsList] = useState<any[]>([]);
+  const [selectedAttendantId, setSelectedAttendantId] = useState<string>("");
+  const [isNewAttendantModalOpen, setIsNewAttendantModalOpen] = useState(false);
+  const [newAttendantName, setNewAttendantName] = useState("");
+  const [newAttendantSlug, setNewAttendantSlug] = useState("");
+  const [isCreatingAttendant, setIsCreatingAttendant] = useState(false);
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       setAppUrl(window.location.origin);
@@ -149,11 +161,34 @@ export default function AdminPage() {
       const data = await res.json();
       setIsAuthenticated(data.isAuthenticated);
       if (data.isAuthenticated) {
-        loadConfig();
-        loadStats();
+        loadAttendants();
       }
     } catch {
       setIsAuthenticated(false);
+    }
+  };
+
+  const loadAttendants = async (preferredId?: string) => {
+    try {
+      const res = await fetch("/api/admin/attendants");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.attendants)) {
+          setAttendantsList(data.attendants);
+          const targetId =
+            preferredId ||
+            selectedAttendantId ||
+            (data.attendants.length > 0 ? data.attendants[0].id : "");
+
+          if (targetId) {
+            setSelectedAttendantId(targetId);
+            loadConfig(targetId);
+            loadStats(targetId);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Error loading attendants:", err);
     }
   };
 
@@ -173,8 +208,7 @@ export default function AdminPage() {
       }
 
       setIsAuthenticated(true);
-      loadConfig();
-      loadStats();
+      loadAttendants();
     } catch {
       setAuthError("Erro de conexão ao autenticar");
     }
@@ -186,9 +220,11 @@ export default function AdminPage() {
     setPasswordInput("");
   };
 
-  const loadConfig = async () => {
+  const loadConfig = async (attendantId?: string) => {
     try {
-      const res = await fetch("/api/admin/config");
+      const targetId = attendantId || selectedAttendantId;
+      const query = targetId ? `?attendantId=${encodeURIComponent(targetId)}` : "";
+      const res = await fetch(`/api/admin/config${query}`);
       if (res.ok) {
         const data = await res.json();
         setConfig(data.config);
@@ -204,15 +240,89 @@ export default function AdminPage() {
     }
   };
 
-  const loadStats = async () => {
+  const loadStats = async (attendantId?: string) => {
     try {
-      const res = await fetch("/api/admin/stats");
+      const targetId = attendantId || selectedAttendantId;
+      const query = targetId ? `?attendantId=${encodeURIComponent(targetId)}` : "";
+      const res = await fetch(`/api/admin/stats${query}`);
       if (res.ok) {
         const data = await res.json();
         setStatsData(data);
       }
     } catch (err) {
       console.error("Error loading stats:", err);
+    }
+  };
+
+  const handleSelectAttendant = (id: string) => {
+    setSelectedAttendantId(id);
+    loadConfig(id);
+    loadStats(id);
+  };
+
+  const handleCreateAttendant = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAttendantName.trim()) {
+      alert("Informe o nome do atendente.");
+      return;
+    }
+
+    setIsCreatingAttendant(true);
+    try {
+      const res = await fetch("/api/admin/attendants", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newAttendantName.trim(),
+          slug: newAttendantSlug.trim() || undefined,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Erro ao criar atendente");
+      }
+
+      const data = await res.json();
+      setIsNewAttendantModalOpen(false);
+      setNewAttendantName("");
+      setNewAttendantSlug("");
+      await loadAttendants(data.attendant.id);
+      alert("Novo atendente criado com sucesso!");
+    } catch (err: any) {
+      alert(`Falha ao criar atendente: ${err.message}`);
+    } finally {
+      setIsCreatingAttendant(false);
+    }
+  };
+
+  const handleDeleteAttendant = async () => {
+    if (attendantsList.length <= 1) {
+      alert("Você não pode excluir o único atendente do sistema.");
+      return;
+    }
+
+    const current = attendantsList.find((a) => a.id === selectedAttendantId);
+    if (!confirm(`Tem certeza que deseja excluir o atendente "${current?.name || "selecionado"}"?`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/admin/attendants/${selectedAttendantId}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Erro ao excluir");
+      }
+
+      const remaining = attendantsList.filter((a) => a.id !== selectedAttendantId);
+      const nextId = remaining.length > 0 ? remaining[0].id : "";
+      await loadAttendants(nextId);
+      alert("Atendente excluído com sucesso.");
+    } catch (err: any) {
+      alert(`Falha ao excluir atendente: ${err.message}`);
     }
   };
 
@@ -224,6 +334,8 @@ export default function AdminPage() {
     try {
       const payloadToSave = {
         ...config,
+        id: selectedAttendantId,
+        attendantId: selectedAttendantId,
         mediaCatalog: JSON.stringify(mediaList),
       };
 
@@ -239,6 +351,8 @@ export default function AdminPage() {
       }
 
       setSaveSuccess(true);
+      // Reload attendants list to update any changed names or slugs
+      loadAttendants(selectedAttendantId);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err: any) {
       alert(`Falha ao salvar configurações: ${err?.message || "Erro desconhecido"}`);
@@ -519,6 +633,95 @@ export default function AdminPage() {
 
       {/* Main Content */}
       <div className="max-w-6xl w-full mx-auto p-4 sm:p-8 flex-1">
+        {/* Attendant Switcher Bar */}
+        <div className="bg-[#111b21] border border-[#222e35] rounded-2xl p-4 sm:p-5 mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
+          <div className="flex items-center gap-3.5">
+            <div className="relative">
+              {config.agentAvatar ? (
+                <img
+                  src={config.agentAvatar}
+                  alt={config.agentName}
+                  className="w-12 h-12 rounded-full object-cover ring-2 ring-emerald-500/50 shadow-md"
+                />
+              ) : (
+                <div className="w-12 h-12 rounded-full bg-[#202c33] flex items-center justify-center text-emerald-400 font-bold text-lg ring-2 ring-emerald-500/40">
+                  {(config.agentName || "G").charAt(0)}
+                </div>
+              )}
+              <span
+                className={`absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-[#111b21] ${
+                  config.isActive !== false ? "bg-emerald-500" : "bg-neutral-500"
+                }`}
+                title={config.isActive !== false ? "Atendente Ativo no Lobby" : "Atendente Oculto do Lobby"}
+              />
+            </div>
+
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-[#8696a0] font-medium">Atendente Selecionado:</span>
+                <select
+                  value={selectedAttendantId}
+                  onChange={(e) => handleSelectAttendant(e.target.value)}
+                  className="bg-[#202c33] text-white border border-[#26353d] rounded-xl px-3 py-1.5 text-xs sm:text-sm font-semibold focus:outline-none focus:border-emerald-500 cursor-pointer"
+                >
+                  {attendantsList.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name} (/{a.slug})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="text-[#8696a0]">Link de Vendas:</span>
+                <a
+                  href={`${appUrl}/${config.slug || "gabriel"}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-emerald-400 hover:text-emerald-300 font-mono inline-flex items-center gap-1 transition-colors"
+                >
+                  <span>{`${appUrl}/${config.slug || "gabriel"}`}</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${appUrl}/${config.slug || "gabriel"}`);
+                    alert("Link do atendente copiado!");
+                  }}
+                  className="p-1 text-[#8696a0] hover:text-white transition-colors"
+                  title="Copiar link"
+                >
+                  <Copy className="w-3 h-3" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-end md:self-center">
+            <button
+              type="button"
+              onClick={() => setIsNewAttendantModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#202c33] hover:bg-[#2a3942] text-white rounded-xl text-xs font-medium border border-[#26353d] transition-all shadow-sm"
+            >
+              <Plus className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Novo Atendente</span>
+            </button>
+
+            {attendantsList.length > 1 && (
+              <button
+                type="button"
+                onClick={handleDeleteAttendant}
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl text-xs font-medium border border-red-500/20 transition-all"
+                title="Excluir este atendente"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Excluir</span>
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* Navigation Tabs */}
         <div className="flex flex-wrap gap-2 border-b border-[#222e35] pb-4 mb-6">
           <button
@@ -752,10 +955,10 @@ export default function AdminPage() {
                 </p>
               </div>
 
-              {/* Agent Name Configuration & [NOME] tag */}
+              {/* Agent Profile & Identity */}
               <div className="p-4 bg-[#182229] border border-[#222e35] rounded-xl space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
                     <label className="block text-xs font-semibold text-white mb-1">
                       Nome do Atendente
                     </label>
@@ -764,13 +967,72 @@ export default function AdminPage() {
                       value={config.agentName}
                       onChange={(e) => setConfig({ ...config, agentName: e.target.value })}
                       placeholder="Ex: Gabriel Siqueira"
-                      className="w-full sm:w-80 px-3.5 py-2.5 bg-[#202c33] border border-[#26353d] focus:border-emerald-500 rounded-xl text-xs sm:text-sm text-white outline-none"
+                      className="w-full px-3.5 py-2.5 bg-[#202c33] border border-[#26353d] focus:border-emerald-500 rounded-xl text-xs sm:text-sm text-white outline-none"
                     />
                   </div>
 
-                  <div className="flex flex-col items-start sm:items-end">
-                    <span className="text-xs text-[#8696a0] mb-1">Variáveis Dinâmicas:</span>
-                    <div className="flex items-center gap-2">
+                  <div>
+                    <label className="block text-xs font-semibold text-white mb-1">
+                      Slug da URL (Link Direto)
+                    </label>
+                    <div className="flex items-center">
+                      <span className="px-3 py-2.5 bg-[#182229] border border-r-0 border-[#26353d] rounded-l-xl text-xs text-[#8696a0] font-mono">
+                        {"/"}
+                      </span>
+                      <input
+                        type="text"
+                        value={config.slug || ""}
+                        onChange={(e) =>
+                          setConfig({
+                            ...config,
+                            slug: e.target.value
+                              .toLowerCase()
+                              .replace(/[^a-z0-9_-]/g, "-"),
+                          })
+                        }
+                        placeholder="gabriel"
+                        className="w-full px-3 py-2.5 bg-[#202c33] border border-[#26353d] focus:border-emerald-500 rounded-r-xl text-xs sm:text-sm text-white font-mono outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-white mb-1">
+                      Bio / Especialidade (Exibido no Lobby Inicial)
+                    </label>
+                    <input
+                      type="text"
+                      value={config.bio || ""}
+                      onChange={(e) => setConfig({ ...config, bio: e.target.value })}
+                      placeholder="Ex: Especialista em Vendas e Suporte VIP"
+                      className="w-full px-3.5 py-2.5 bg-[#202c33] border border-[#26353d] focus:border-emerald-500 rounded-xl text-xs sm:text-sm text-white outline-none"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between sm:justify-start gap-4 pt-4 sm:pt-6">
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={config.isActive !== false}
+                        onChange={(e) => setConfig({ ...config, isActive: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-10 h-5 bg-[#202c33] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                    </label>
+                    <div>
+                      <span className="text-xs font-semibold text-white block">
+                        Exibir na Página Inicial (Lobby)
+                      </span>
+                      <span className="text-[11px] text-[#8696a0]">
+                        Se desativado, o atendente só pode ser acessado pelo link direto.
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-[#222e35]/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <span className="text-xs text-[#8696a0]">Variáveis Dinâmicas do Prompt:</span>
+                  <div className="flex items-center gap-2">
                       <button
                         type="button"
                         onClick={() => {
@@ -820,7 +1082,6 @@ export default function AdminPage() {
                       </button>
                     </div>
                   </div>
-                </div>
 
                 {/* Upload Foto da Atendente */}
                 <div className="pt-3 border-t border-[#222e35] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1566,6 +1827,98 @@ export default function AdminPage() {
           </div>
         )}
       </div>
+
+      {/* New Attendant Modal */}
+      {isNewAttendantModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#111b21] border border-[#222e35] rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-[#222e35] pb-3">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Plus className="w-5 h-5 text-emerald-400" />
+                <span>Cadastrar Novo Atendente</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsNewAttendantModalOpen(false)}
+                className="text-[#8696a0] hover:text-white text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateAttendant} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-white mb-1">
+                  Nome do Atendente *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newAttendantName}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setNewAttendantName(val);
+                    setNewAttendantSlug(
+                      val
+                        .toLowerCase()
+                        .normalize("NFD")
+                        .replace(/[\u0300-\u036f]/g, "")
+                        .replace(/[^a-z0-9]+/g, "-")
+                        .replace(/^-+|-+$/g, "")
+                    );
+                  }}
+                  placeholder="Ex: Amanda Castro"
+                  className="w-full px-3.5 py-2.5 bg-[#202c33] border border-[#26353d] focus:border-emerald-500 rounded-xl text-xs sm:text-sm text-white outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-white mb-1">
+                  Slug da URL (Link)
+                </label>
+                <div className="flex items-center">
+                  <span className="px-3 py-2.5 bg-[#182229] border border-r-0 border-[#26353d] rounded-l-xl text-xs text-[#8696a0] font-mono">
+                    {"/"}
+                  </span>
+                  <input
+                    type="text"
+                    value={newAttendantSlug}
+                    onChange={(e) =>
+                      setNewAttendantSlug(
+                        e.target.value
+                          .toLowerCase()
+                          .replace(/[^a-z0-9_-]/g, "-")
+                      )
+                    }
+                    placeholder="amanda"
+                    className="w-full px-3 py-2.5 bg-[#202c33] border border-[#26353d] focus:border-emerald-500 rounded-r-xl text-xs sm:text-sm text-white font-mono outline-none"
+                  />
+                </div>
+                <p className="text-[11px] text-[#8696a0] mt-1">
+                  O link de vendas será: <span className="text-emerald-400 font-mono">{`${appUrl}/${newAttendantSlug || "nome"}`}</span>
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsNewAttendantModalOpen(false)}
+                  className="px-4 py-2 bg-[#202c33] hover:bg-[#2a3942] text-white text-xs font-medium rounded-xl transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingAttendant}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl transition-colors shadow-md shadow-emerald-950 disabled:opacity-50"
+                >
+                  {isCreatingAttendant ? "Criando..." : "Criar Atendente"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

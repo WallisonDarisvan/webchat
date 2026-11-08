@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, ensureDatabaseSchema } from "@/lib/prisma";
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin";
 const COOKIE_NAME = "admin_auth_token";
@@ -16,12 +16,35 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const [totalSessions, totalMessages, orders] = await Promise.all([
-      prisma.chatSession.count(),
-      prisma.chatMessage.count(),
+    await ensureDatabaseSchema();
+    const { searchParams } = new URL(req.url);
+    const attendantId = searchParams.get("attendantId") || searchParams.get("slug") || undefined;
+
+    const sessionWhere = attendantId
+      ? {
+          OR: [{ attendantId }, { attendantSlug: attendantId }],
+        }
+      : {};
+
+    const orderWhere = attendantId
+      ? {
+          OR: [{ attendantId }, { attendantSlug: attendantId }],
+        }
+      : {};
+
+    const [totalSessions, totalMessages, orders, recentSessions] = await Promise.all([
+      prisma.chatSession.count({ where: sessionWhere }),
+      prisma.chatMessage.count({
+        where: attendantId
+          ? {
+              session: sessionWhere,
+            }
+          : {},
+      }),
       prisma.order.findMany({
+        where: orderWhere,
         orderBy: { createdAt: "desc" },
-        take: 20,
+        take: 30,
         include: {
           session: {
             select: {
@@ -32,24 +55,24 @@ export async function GET(req: NextRequest) {
           },
         },
       }),
+      prisma.chatSession.findMany({
+        where: sessionWhere,
+        orderBy: { updatedAt: "desc" },
+        take: 15,
+        include: {
+          _count: {
+            select: { messages: true },
+          },
+          orders: {
+            take: 1,
+            orderBy: { createdAt: "desc" },
+          },
+        },
+      }),
     ]);
 
     const paidOrders = orders.filter((o) => o.status === "paid");
     const totalRevenue = paidOrders.reduce((acc, curr) => acc + Number(curr.amount), 0);
-
-    const recentSessions = await prisma.chatSession.findMany({
-      orderBy: { updatedAt: "desc" },
-      take: 10,
-      include: {
-        _count: {
-          select: { messages: true },
-        },
-        orders: {
-          take: 1,
-          orderBy: { createdAt: "desc" },
-        },
-      },
-    });
 
     return NextResponse.json({
       success: true,
@@ -71,4 +94,3 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Erro interno" }, { status: 500 });
   }
 }
-

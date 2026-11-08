@@ -85,7 +85,11 @@ export function generatePixCopiaECola(params: {
  * Creates an order in the database and generates PIX payment details
  */
 export async function createOrderForSession(params: CreateOrderParams): Promise<OrderResult> {
-  const config = await getAppConfig();
+  const session = await prisma.chatSession.findUnique({
+    where: { id: params.sessionId },
+  });
+  const attendantIdent = (session as any)?.attendantId || (session as any)?.attendantSlug;
+  const config = await getAppConfig(attendantIdent);
   const amount = params.amount ?? config.productPrice;
 
   // Generate PIX code
@@ -107,6 +111,8 @@ export async function createOrderForSession(params: CreateOrderParams): Promise<
   const order = await prisma.order.create({
     data: {
       sessionId: params.sessionId,
+      attendantId: (session as any)?.attendantId || null,
+      attendantSlug: (session as any)?.attendantSlug || null,
       amount,
       status: "pending",
       deliveryLink: config.productDeliveryLink,

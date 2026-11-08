@@ -32,9 +32,41 @@ export async function ensureDatabaseSchema() {
   try {
     // 1. Ensure all core tables exist in SQLite
     await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "attendants" (
+        "id" TEXT PRIMARY KEY,
+        "slug" TEXT UNIQUE NOT NULL,
+        "name" TEXT NOT NULL DEFAULT 'Gabriel Siqueira',
+        "avatar" TEXT NOT NULL DEFAULT '',
+        "bio" TEXT NOT NULL DEFAULT 'Especialista em Vendas e Atendimento',
+        "is_active" BOOLEAN NOT NULL DEFAULT 1,
+        "ai_base_url" TEXT NOT NULL DEFAULT 'https://api.deepseek.com',
+        "ai_api_key" TEXT NOT NULL DEFAULT '',
+        "ai_model" TEXT NOT NULL DEFAULT 'deepseek-chat',
+        "ai_temperature" REAL NOT NULL DEFAULT 0.75,
+        "system_prompt" TEXT NOT NULL DEFAULT '',
+        "product_name" TEXT NOT NULL DEFAULT 'Método Alta Conversão',
+        "product_price" REAL NOT NULL DEFAULT 97.0,
+        "product_delivery_link" TEXT NOT NULL DEFAULT 'https://seusite.com/download/acesso-vip',
+        "payment_gateway" TEXT NOT NULL DEFAULT 'simulated',
+        "payment_gateway_token" TEXT NOT NULL DEFAULT '',
+        "payment_webhook_secret" TEXT NOT NULL DEFAULT '',
+        "media_catalog" TEXT NOT NULL DEFAULT '[]',
+        "media_instructions" TEXT NOT NULL DEFAULT '',
+        "max_agent_photos" INTEGER NOT NULL DEFAULT 3,
+        "post_purchase_minutes" INTEGER NOT NULL DEFAULT 10,
+        "non_purchase_minutes" INTEGER NOT NULL DEFAULT 15,
+        "cooldown_hours" INTEGER NOT NULL DEFAULT 24,
+        "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updated_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS "chat_sessions" (
         "id" TEXT PRIMARY KEY,
-        "device_id" TEXT UNIQUE NOT NULL,
+        "device_id" TEXT NOT NULL,
+        "attendant_id" TEXT,
+        "attendant_slug" TEXT,
         "user_name" TEXT NOT NULL,
         "last_ip" TEXT,
         "user_agent" TEXT,
@@ -42,7 +74,8 @@ export async function ensureDatabaseSchema() {
         "lock_reason" TEXT,
         "return_handled" BOOLEAN NOT NULL DEFAULT 0,
         "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        "updated_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        "updated_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY ("attendant_id") REFERENCES "attendants" ("id") ON DELETE SET NULL
       );
     `);
 
@@ -62,6 +95,8 @@ export async function ensureDatabaseSchema() {
       CREATE TABLE IF NOT EXISTS "orders" (
         "id" TEXT PRIMARY KEY,
         "session_id" TEXT NOT NULL,
+        "attendant_id" TEXT,
+        "attendant_slug" TEXT,
         "external_id" TEXT,
         "amount" REAL NOT NULL,
         "status" TEXT NOT NULL DEFAULT 'pending',
@@ -71,7 +106,8 @@ export async function ensureDatabaseSchema() {
         "pix_qr_code_url" TEXT,
         "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         "updated_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY ("session_id") REFERENCES "chat_sessions" ("id") ON DELETE CASCADE
+        FOREIGN KEY ("session_id") REFERENCES "chat_sessions" ("id") ON DELETE CASCADE,
+        FOREIGN KEY ("attendant_id") REFERENCES "attendants" ("id") ON DELETE SET NULL
       );
     `);
 
@@ -110,6 +146,12 @@ export async function ensureDatabaseSchema() {
       `ALTER TABLE "chat_sessions" ADD COLUMN "locked_until" DATETIME`,
       `ALTER TABLE "chat_sessions" ADD COLUMN "lock_reason" TEXT`,
       `ALTER TABLE "chat_sessions" ADD COLUMN "return_handled" BOOLEAN DEFAULT 0`,
+      `ALTER TABLE "chat_sessions" ADD COLUMN "attendant_id" TEXT`,
+      `ALTER TABLE "chat_sessions" ADD COLUMN "attendant_slug" TEXT`,
+      `ALTER TABLE "orders" ADD COLUMN "attendant_id" TEXT`,
+      `ALTER TABLE "orders" ADD COLUMN "attendant_slug" TEXT`,
+      `ALTER TABLE "attendants" ADD COLUMN "bio" TEXT DEFAULT 'Especialista em Vendas e Atendimento'`,
+      `ALTER TABLE "attendants" ADD COLUMN "is_active" BOOLEAN DEFAULT 1`,
     ];
 
     for (const sql of alterCommands) {
@@ -118,6 +160,78 @@ export async function ensureDatabaseSchema() {
       } catch {
         // Column already exists, safe to ignore
       }
+    }
+
+    // 3. Ensure at least one initial attendant exists and migrate from app_configs if needed
+    try {
+      const attendantsCount = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT COUNT(*) as cnt FROM "attendants"`
+      );
+      const count = Number(attendantsCount[0]?.cnt ?? attendantsCount[0]?.count ?? 0);
+
+      if (count === 0) {
+        // Try reading legacy app_configs
+        const configs = await prisma.$queryRawUnsafe<any[]>(
+          `SELECT * FROM "app_configs" WHERE id = 'global' LIMIT 1`
+        );
+        const legacy = configs[0] || {};
+
+        const defaultId = "attendant-gabriel-siqueira";
+        const defaultSlug = "gabriel";
+        const defaultName = legacy.agent_name || "Gabriel Siqueira";
+        const defaultAvatar = legacy.agent_avatar || "";
+        const defaultAiBaseUrl = legacy.ai_base_url || "https://api.deepseek.com";
+        const defaultAiApiKey = legacy.ai_api_key || "";
+        const defaultAiModel = legacy.ai_model || "deepseek-chat";
+        const defaultAiTemp = legacy.ai_temperature || 0.75;
+        const defaultPrompt = legacy.system_prompt || "";
+        const defaultProdName = legacy.product_name || "Método Alta Conversão";
+        const defaultProdPrice = legacy.product_price || 97.0;
+        const defaultProdLink = legacy.product_delivery_link || "https://seusite.com/download/acesso-vip";
+        const defaultGateway = legacy.payment_gateway || "simulated";
+        const defaultToken = legacy.payment_gateway_token || "";
+        const defaultSecret = legacy.payment_webhook_secret || "";
+        const defaultMediaCat = legacy.media_catalog || "[]";
+        const defaultMediaInst = legacy.media_instructions || "";
+        const defaultMaxPhotos = legacy.max_agent_photos || 3;
+        const defaultPostMin = legacy.post_purchase_minutes || 10;
+        const defaultNonMin = legacy.non_purchase_minutes || 15;
+        const defaultCooldown = legacy.cooldown_hours || 24;
+
+        await prisma.$executeRawUnsafe(`
+          INSERT INTO "attendants" (
+            "id", "slug", "name", "avatar", "bio", "is_active",
+            "ai_base_url", "ai_api_key", "ai_model", "ai_temperature", "system_prompt",
+            "product_name", "product_price", "product_delivery_link",
+            "payment_gateway", "payment_gateway_token", "payment_webhook_secret",
+            "media_catalog", "media_instructions", "max_agent_photos",
+            "post_purchase_minutes", "non_purchase_minutes", "cooldown_hours"
+          ) VALUES (
+            '${defaultId}', '${defaultSlug}', '${defaultName.replace(/'/g, "''")}', '${defaultAvatar.replace(/'/g, "''")}', 'Especialista em Vendas e Atendimento', 1,
+            '${defaultAiBaseUrl.replace(/'/g, "''")}', '${defaultAiApiKey.replace(/'/g, "''")}', '${defaultAiModel.replace(/'/g, "''")}', ${defaultAiTemp}, '${defaultPrompt.replace(/'/g, "''")}',
+            '${defaultProdName.replace(/'/g, "''")}', ${defaultProdPrice}, '${defaultProdLink.replace(/'/g, "''")}',
+            '${defaultGateway.replace(/'/g, "''")}', '${defaultToken.replace(/'/g, "''")}', '${defaultSecret.replace(/'/g, "''")}',
+            '${defaultMediaCat.replace(/'/g, "''")}', '${defaultMediaInst.replace(/'/g, "''")}', ${defaultMaxPhotos},
+            ${defaultPostMin}, ${defaultNonMin}, ${defaultCooldown}
+          )
+        `);
+
+        // Associate existing legacy sessions to this default attendant
+        await prisma.$executeRawUnsafe(`
+          UPDATE "chat_sessions"
+          SET "attendant_id" = '${defaultId}', "attendant_slug" = '${defaultSlug}'
+          WHERE "attendant_id" IS NULL
+        `);
+
+        // Associate existing legacy orders to this default attendant
+        await prisma.$executeRawUnsafe(`
+          UPDATE "orders"
+          SET "attendant_id" = '${defaultId}', "attendant_slug" = '${defaultSlug}'
+          WHERE "attendant_id" IS NULL
+        `);
+      }
+    } catch (seedErr) {
+      console.warn("Seed initial attendant note:", seedErr);
     }
 
     schemaEnsured = true;

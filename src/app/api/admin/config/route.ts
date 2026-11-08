@@ -17,7 +17,9 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const config = await getAppConfig();
+    const { searchParams } = new URL(req.url);
+    const attendantId = searchParams.get("attendantId") || searchParams.get("slug") || undefined;
+    const config = await getAppConfig(attendantId);
     return NextResponse.json({ success: true, config });
   } catch (error) {
     console.error("Error in GET /api/admin/config:", error);
@@ -33,7 +35,58 @@ export async function PUT(req: NextRequest) {
   try {
     await ensureDatabaseSchema();
     const data = await req.json();
+    const attendantId = data.attendantId || data.id;
 
+    // If attendantId refers to an attendant, update that attendant record
+    const existingAttendant = attendantId
+      ? await prisma.attendant.findFirst({
+          where: {
+            OR: [{ id: attendantId }, { slug: attendantId }],
+          },
+        })
+      : await prisma.attendant.findFirst({ orderBy: { createdAt: "asc" } });
+
+    if (existingAttendant) {
+      const updatedAttendant = await prisma.attendant.update({
+        where: { id: existingAttendant.id },
+        data: {
+          name: data.agentName || data.name || existingAttendant.name,
+          slug: data.slug || existingAttendant.slug,
+          avatar: typeof data.agentAvatar !== "undefined" ? data.agentAvatar : data.avatar ?? existingAttendant.avatar,
+          bio: data.bio ?? existingAttendant.bio,
+          isActive: typeof data.isActive !== "undefined" ? Boolean(data.isActive) : existingAttendant.isActive,
+          aiBaseUrl: data.aiBaseUrl ?? existingAttendant.aiBaseUrl,
+          aiApiKey: data.aiApiKey ?? existingAttendant.aiApiKey,
+          aiModel: data.aiModel ?? existingAttendant.aiModel,
+          aiTemperature: typeof data.aiTemperature !== "undefined" ? parseFloat(data.aiTemperature) : existingAttendant.aiTemperature,
+          systemPrompt: data.systemPrompt ?? existingAttendant.systemPrompt,
+          productName: data.productName ?? existingAttendant.productName,
+          productPrice: typeof data.productPrice !== "undefined" ? parseFloat(data.productPrice) : existingAttendant.productPrice,
+          productDeliveryLink: data.productDeliveryLink ?? existingAttendant.productDeliveryLink,
+          paymentGateway: data.paymentGateway ?? existingAttendant.paymentGateway,
+          paymentGatewayToken: data.paymentGatewayToken ?? existingAttendant.paymentGatewayToken,
+          paymentWebhookSecret: data.paymentWebhookSecret ?? existingAttendant.paymentWebhookSecret,
+          mediaCatalog: typeof data.mediaCatalog === "string" ? data.mediaCatalog : JSON.stringify(data.mediaCatalog || []),
+          mediaInstructions: data.mediaInstructions ?? existingAttendant.mediaInstructions,
+          maxAgentPhotos: typeof data.maxAgentPhotos !== "undefined" ? parseInt(data.maxAgentPhotos) : existingAttendant.maxAgentPhotos,
+          postPurchaseMinutes: typeof data.postPurchaseMinutes !== "undefined" ? parseInt(data.postPurchaseMinutes) : existingAttendant.postPurchaseMinutes,
+          nonPurchaseMinutes: typeof data.nonPurchaseMinutes !== "undefined" ? parseInt(data.nonPurchaseMinutes) : existingAttendant.nonPurchaseMinutes,
+          cooldownHours: typeof data.cooldownHours !== "undefined" ? parseInt(data.cooldownHours) : existingAttendant.cooldownHours,
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        config: {
+          ...updatedAttendant,
+          agentName: updatedAttendant.name,
+          agentAvatar: updatedAttendant.avatar,
+          productPrice: Number(updatedAttendant.productPrice),
+        },
+      });
+    }
+
+    // Fallback: update legacy app_configs
     const updated = await prisma.appConfig.upsert({
       where: { id: "global" },
       update: {
@@ -94,4 +147,3 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-

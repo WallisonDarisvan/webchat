@@ -7,9 +7,44 @@ generator client {
   provider = "prisma-client-js"
 }
 
+model Attendant {
+  id                   String        @id @default(uuid())
+  slug                 String        @unique
+  name                 String        @default("Gabriel Siqueira")
+  avatar               String        @default("")
+  bio                  String        @default("Especialista em Vendas e Atendimento")
+  isActive             Boolean       @default(true) @map("is_active")
+  aiBaseUrl            String        @default("https://api.deepseek.com") @map("ai_base_url")
+  aiApiKey             String        @default("") @map("ai_api_key")
+  aiModel              String        @default("deepseek-chat") @map("ai_model")
+  aiTemperature        Float         @default(0.75) @map("ai_temperature")
+  systemPrompt         String        @default("") @map("system_prompt")
+  productName          String        @default("Método Alta Conversão") @map("product_name")
+  productPrice         Float         @default(97.00) @map("product_price")
+  productDeliveryLink  String        @default("https://seusite.com/download/acesso-vip") @map("product_delivery_link")
+  paymentGateway       String        @default("simulated") @map("payment_gateway")
+  paymentGatewayToken  String        @default("") @map("payment_gateway_token")
+  paymentWebhookSecret String        @default("") @map("payment_webhook_secret")
+  mediaCatalog         String        @default("[]") @map("media_catalog")
+  mediaInstructions    String        @default("") @map("media_instructions")
+  maxAgentPhotos       Int           @default(3) @map("max_agent_photos")
+  postPurchaseMinutes  Int           @default(10) @map("post_purchase_minutes")
+  nonPurchaseMinutes   Int           @default(15) @map("non_purchase_minutes")
+  cooldownHours        Int           @default(24) @map("cooldown_hours")
+  createdAt            DateTime      @default(now()) @map("created_at")
+  updatedAt            DateTime      @updatedAt @map("updated_at")
+  sessions             ChatSession[]
+  orders               Order[]
+
+  @@map("attendants")
+}
+
 model ChatSession {
   id            String        @id @default(uuid())
-  deviceId      String        @unique @map("device_id")
+  deviceId      String        @map("device_id")
+  attendantId   String?       @map("attendant_id")
+  attendantSlug String?       @map("attendant_slug")
+  attendant     Attendant?    @relation(fields: [attendantId], references: [id], onDelete: SetNull)
   userName      String        @map("user_name")
   lastIp        String?       @map("last_ip")
   userAgent     String?       @map("user_agent")
@@ -22,6 +57,8 @@ model ChatSession {
   orders        Order[]
 
   @@index([deviceId])
+  @@index([attendantId])
+  @@index([attendantSlug])
   @@map("chat_sessions")
 }
 
@@ -39,21 +76,26 @@ model ChatMessage {
 }
 
 model Order {
-  id           String      @id @default(uuid())
-  sessionId    String      @map("session_id")
-  session      ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  externalId   String?     @map("external_id")
-  amount       Float
-  status       String      @default("pending") // "pending" | "paid" | "cancelled" | "refunded"
-  paidAt       DateTime?   @map("paid_at")
-  deliveryLink String?     @map("delivery_link")
-  pixCode      String?     @map("pix_code")
-  pixQrCodeUrl String?     @map("pix_qr_code_url")
-  createdAt    DateTime    @default(now()) @map("created_at")
-  updatedAt    DateTime    @updatedAt @map("updated_at")
+  id            String       @id @default(uuid())
+  sessionId     String       @map("session_id")
+  session       ChatSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  attendantId   String?      @map("attendant_id")
+  attendantSlug String?      @map("attendant_slug")
+  attendant     Attendant?   @relation(fields: [attendantId], references: [id], onDelete: SetNull)
+  externalId    String?      @map("external_id")
+  amount        Float
+  status        String       @default("pending") // "pending" | "paid" | "cancelled" | "refunded"
+  paidAt        DateTime?    @map("paid_at")
+  deliveryLink  String?      @map("delivery_link")
+  pixCode       String?      @map("pix_code")
+  pixQrCodeUrl  String?      @map("pix_qr_code_url")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
 
   @@index([sessionId])
   @@index([externalId])
+  @@index([attendantId])
+  @@index([attendantSlug])
   @@map("orders")
 }
 

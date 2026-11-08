@@ -458,3 +458,4 @@ export function ChatContainer({ attendantSlug, showBackButton = true }: ChatCont
     </div>
   );
 }
+

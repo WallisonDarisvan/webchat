@@ -9,3 +9,4 @@ export default async function AttendantChatPage({ params }: AttendantPageProps) 
   const { slug } = await params;
   return <ChatContainer attendantSlug={slug} showBackButton={true} />;
 }
+

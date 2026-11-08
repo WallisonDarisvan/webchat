@@ -30,3 +30,4 @@ export async function GET() {
     return NextResponse.json({ success: false, attendants: [] }, { status: 500 });
   }
 }
+

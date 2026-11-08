@@ -579,9 +579,9 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0b141a] text-[#e9edef] flex flex-col">
+    <div className="h-screen bg-[#0b141a] text-[#e9edef] flex flex-col overflow-hidden">
       {/* Top Navbar */}
-      <header className="sticky top-0 z-30 bg-[#111b21] border-b border-[#222e35] px-4 sm:px-8 py-3.5 flex items-center justify-between">
+      <header className="shrink-0 z-30 bg-[#111b21] border-b border-[#222e35] px-4 sm:px-8 py-3.5 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Link
             href="/"
@@ -633,9 +633,9 @@ export default function AdminPage() {
       </header>
 
       {/* 2-Column Dashboard: Full-bleed Left Sidebar + Right Workspace */}
-      <div className="flex-1 flex flex-col md:flex-row w-full min-h-0">
-        {/* Left Sidebar: Attendants */}
-        <aside className="w-full md:w-64 lg:w-72 bg-[#111b21] border-b md:border-b-0 md:border-r border-[#222e35] flex flex-col shrink-0">
+      <div className="flex-1 flex flex-col md:flex-row w-full min-h-0 overflow-hidden">
+        {/* Left Sidebar: Attendants (Fixed) */}
+        <aside className="w-full md:w-64 lg:w-72 bg-[#111b21] border-b md:border-b-0 md:border-r border-[#222e35] flex flex-col shrink-0 h-full overflow-hidden">
           {/* Sidebar Header */}
           <div className="p-4 border-b border-[#222e35] flex items-center justify-between bg-[#111b21]">
             <div className="flex items-center gap-2">
@@ -739,8 +739,8 @@ export default function AdminPage() {
           )}
         </aside>
 
-        {/* Right Workspace: Config tabs */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 min-w-0">
+        {/* Right Workspace: Config tabs (Scrollable) */}
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 min-w-0 custom-scrollbar h-full">
           {/* Current Attendant Mini-Banner with Sales Link */}
           <div className="bg-[#111b21] border border-[#222e35] rounded-2xl p-4 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
             <div className="flex items-center gap-3">

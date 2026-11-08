@@ -7,9 +7,17 @@ interface VisitorModalProps {
   isOpen: boolean;
   onSubmit: (name: string) => void;
   isLoading: boolean;
+  agentAvatar?: string;
+  agentName?: string;
 }
 
-export function VisitorModal({ isOpen, onSubmit, isLoading }: VisitorModalProps) {
+export function VisitorModal({
+  isOpen,
+  onSubmit,
+  isLoading,
+  agentAvatar,
+  agentName = "Gabriel Siqueira",
+}: VisitorModalProps) {
   const [name, setName] = useState("");
 
   if (!isOpen) return null;
@@ -20,68 +28,89 @@ export function VisitorModal({ isOpen, onSubmit, isLoading }: VisitorModalProps)
     onSubmit(name.trim());
   };
 
+  const initials = agentName
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0])
+    .join("")
+    .toUpperCase() || "GS";
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
-      <div className="w-full max-w-md bg-[#111b21] border border-[#222e35] rounded-2xl shadow-2xl overflow-hidden p-6 sm:p-8 text-center relative">
-        {/* Subtle decorative glow */}
-        <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-
-        {/* Attendant Avatar with pulsing badge */}
-        <div className="relative mx-auto w-20 h-20 mb-4">
-          <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-400 p-0.5 shadow-lg shadow-emerald-950/50">
-            <div className="w-full h-full rounded-full bg-[#111b21] flex items-center justify-center overflow-hidden">
-              <span className="text-2xl font-bold text-emerald-400">GS</span>
-            </div>
-          </div>
-          <span className="absolute bottom-1 right-1 w-4 h-4 bg-emerald-500 border-2 border-[#111b21] rounded-full animate-pulse" />
-        </div>
-
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium mb-3">
-          <Sparkles className="w-3.5 h-3.5" />
-          <span>Atendimento Prioritário Online</span>
-        </div>
-
-        <h2 className="text-xl sm:text-2xl font-semibold text-white tracking-tight mb-2">
-          Olá! Como posso te chamar?
-        </h2>
-
-        <p className="text-sm text-[#8696a0] mb-6 leading-relaxed">
-          Para que nosso consultor possa tirar suas dúvidas com total atenção, digite seu primeiro nome abaixo.
-        </p>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Digite seu nome aqui..."
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              disabled={isLoading}
-              required
-              autoFocus
-              className="w-full px-4 py-3.5 bg-[#202c33] border border-[#222e35] focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded-xl text-white placeholder-[#8696a0] text-sm outline-none transition-all duration-200"
+      <div className="w-full max-w-sm bg-[#111b21] border border-[#222e35] rounded-2xl shadow-2xl overflow-hidden text-center relative">
+        {/* Capa 1:1 */}
+        <div className="relative w-full aspect-square overflow-hidden bg-[#182229]">
+          {agentAvatar ? (
+            <img
+              src={agentAvatar}
+              alt={agentName}
+              className="w-full h-full object-cover object-top"
             />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-tr from-emerald-950 via-[#182229] to-[#111b21] flex items-center justify-center">
+              <span className="text-4xl font-bold text-emerald-400/40">{initials}</span>
+            </div>
+          )}
+
+          {/* Gradiente suave na parte inferior da capa para fundir com o card */}
+          <div className="absolute inset-0 bg-gradient-to-t from-[#111b21] via-[#111b21]/30 to-black/20" />
+
+          {/* Badge Online discreta */}
+          <div className="absolute top-3 right-3">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-emerald-400 text-[11px] font-medium shadow-md">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Online agora
+            </span>
+          </div>
+        </div>
+
+        {/* Conteúdo com textos diminuídos e diretos */}
+        <div className="pt-4 pb-5 px-5 sm:px-6 space-y-3">
+          <div>
+            <h2 className="text-base sm:text-lg font-semibold text-white tracking-tight">
+              Como posso te chamar?
+            </h2>
+            <p className="text-xs text-[#8696a0] mt-0.5">
+              Digite seu primeiro nome para iniciar a conversa.
+            </p>
           </div>
 
-          <button
-            type="submit"
-            disabled={!name.trim() || isLoading}
-            className="w-full flex items-center justify-center gap-2 py-3.5 px-6 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium text-sm rounded-xl transition-all duration-200 shadow-lg shadow-emerald-900/30"
-          >
-            {isLoading ? (
-              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            ) : (
-              <>
-                <span>Iniciar Atendimento Agora</span>
-                <ArrowRight className="w-4 h-4" />
-              </>
-            )}
-          </button>
-        </form>
+          <form onSubmit={handleSubmit} className="space-y-3 pt-1">
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Digite seu nome..."
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                disabled={isLoading}
+                required
+                autoFocus
+                className="w-full px-3.5 py-2.5 bg-[#202c33] border border-[#222e35] focus:border-emerald-500 rounded-xl text-white placeholder-[#8696a0] text-xs sm:text-sm outline-none transition-all duration-200"
+              />
+            </div>
 
-        <div className="mt-6 flex items-center justify-center gap-2 text-xs text-[#8696a0]">
-          <ShieldCheck className="w-4 h-4 text-emerald-400" />
-          <span>Conexão criptografada e segura</span>
+            <button
+              type="submit"
+              disabled={!name.trim() || isLoading}
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium text-xs sm:text-sm rounded-xl transition-all duration-200 shadow-md shadow-emerald-950"
+            >
+              {isLoading ? (
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <>
+                  <span>Iniciar Conversa</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </>
+              )}
+            </button>
+          </form>
+
+          <div className="flex items-center justify-center gap-1.5 text-[11px] text-[#8696a0] pt-1">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Atendimento em tempo real</span>
+          </div>
         </div>
       </div>
     </div>

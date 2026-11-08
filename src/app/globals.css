@@ -64,3 +64,11 @@ body {
   animation: pulse-dot 1.4s infinite ease-in-out 0.4s;
 }
 
+/* Ocultar indicador de dev do Next.js */
+nextjs-portal,
+[data-nextjs-dev-tools-button],
+[data-nextjs-toast],
+#nextjs-dev-indicator {
+  display: none !important;
+}
+

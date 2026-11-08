@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { generateAIResponse, ChatHistoryItem } from "@/lib/ai";
-import { calculateTypingDelay, sleep } from "@/lib/humanizer";
-import { createOrderForSession } from "@/lib/payment";
+import { queueAIMessageGeneration } from "@/lib/ai-queue";
 import { sessionEvents } from "@/lib/events";
 
 export async function GET(req: NextRequest) {
@@ -14,9 +12,25 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "sessionId is required" }, { status: 400 });
     }
 
-    const messages = await prisma.chatMessage.findMany({
+    const rawMessages = await prisma.chatMessage.findMany({
       where: { sessionId },
       orderBy: { createdAt: "asc" },
+    });
+
+    // Strip image URL from expired view-once photos for strict security
+    const messages = rawMessages.map((msg) => {
+      if (!msg.metadata) return msg;
+      try {
+        const meta =
+          typeof msg.metadata === "string"
+            ? JSON.parse(msg.metadata)
+            : { ...(msg.metadata as Record<string, any>) };
+        if (meta.viewOnce && meta.viewed) {
+          meta.imageUrl = null;
+          return { ...msg, metadata: meta };
+        }
+      } catch {}
+      return msg;
     });
 
     const orders = await prisma.order.findMany({
@@ -39,130 +53,85 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { sessionId, content } = body;
+    const { sessionId, content, image } = body;
 
-    if (!sessionId || !content?.trim()) {
+    if (!sessionId || (!content?.trim() && !image)) {
       return NextResponse.json(
-        { error: "sessionId and content are required" },
+        { error: "sessionId and message content/image are required" },
         { status: 400 }
       );
     }
 
     const session = await prisma.chatSession.findUnique({
       where: { id: sessionId },
-      include: {
-        messages: {
-          orderBy: { createdAt: "asc" },
-        },
-      },
     });
 
     if (!session) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 
-    // 1. Save User Message
+    // Enforce max 10 photos per chat session
+    if (image) {
+      const userMessages = await prisma.chatMessage.findMany({
+        where: {
+          sessionId,
+          sender: "user",
+        },
+        select: { metadata: true },
+      });
+
+      const photoCount = userMessages.filter((m) => {
+        if (!m.metadata) return false;
+        try {
+          const meta = typeof m.metadata === "string" ? JSON.parse(m.metadata as string) : m.metadata;
+          return !!(meta as { imageUrl?: string })?.imageUrl;
+        } catch {
+          return false;
+        }
+      }).length;
+
+      if (photoCount >= 10) {
+        return NextResponse.json(
+          { error: "Limite de 10 fotos por atendimento atingido.", limitReached: true },
+          { status: 400 }
+        );
+      }
+    }
+
+    // 1. Immediately save User Message to DB (including optimized image if present)
     const userMessage = await prisma.chatMessage.create({
       data: {
         sessionId,
         sender: "user",
-        content: content.trim(),
+        content: (content || "").trim(),
+        metadata: image ? { imageUrl: image } : undefined,
       },
     });
 
-    // Broadcast user message and typing status
+    // 2. Broadcast user message to SSE listeners
     sessionEvents.broadcast(sessionId, "new_message", userMessage);
-    sessionEvents.broadcast(sessionId, "typing_status", { isTyping: true });
 
-    // 2. Prepare conversation history for AI
-    const history: ChatHistoryItem[] = session.messages.map((m) => ({
-      sender: m.sender as "user" | "agent" | "system",
-      content: m.content,
-    }));
-
-    // 3. Generate AI Response
-    const aiResult = await generateAIResponse({
-      userName: session.userName,
-      history,
-      userMessage: content.trim(),
-    });
-
-    // 4. Multi-Bubble Humanized Delivery
-    const createdAgentMessages = [];
-
-    for (let i = 0; i < aiResult.bubbles.length; i++) {
-      const bubbleText = aiResult.bubbles[i];
-
-      // Simulated human typing delay: base (2s - 3.5s) + chars * 35ms
-      const delay = calculateTypingDelay(bubbleText, {
-        minBase: i === 0 ? 1800 : 1200,
-        maxBase: i === 0 ? 3000 : 2000,
+    // 3. Check if session is currently locked (cooldown / offline)
+    const isLocked = Boolean(session.lockedUntil && new Date(session.lockedUntil) > new Date());
+    if (isLocked) {
+      // The attendant is offline. Do not queue AI response (silence/offline)
+      return NextResponse.json({
+        success: true,
+        userMessage,
+        isOffline: true,
       });
-
-      await sleep(delay);
-
-      const agentMsg = await prisma.chatMessage.create({
-        data: {
-          sessionId,
-          sender: "agent",
-          content: bubbleText,
-          metadata: {
-            bubbleIndex: i,
-            totalBubbles: aiResult.bubbles.length,
-          },
-        },
-      });
-
-      createdAgentMessages.push(agentMsg);
-      sessionEvents.broadcast(sessionId, "new_message", agentMsg);
     }
 
-    // 5. If [GERAR_PAGAMENTO] was triggered, create payment card
-    let paymentOrder = null;
-    let paymentMessage = null;
-
-    if (aiResult.shouldGeneratePayment) {
-      // Brief pause between message and payment card generation (1.5s)
-      await sleep(1500);
-
-      const orderResult = await createOrderForSession({
-        sessionId,
-      });
-
-      paymentOrder = orderResult;
-
-      paymentMessage = await prisma.chatMessage.create({
-        data: {
-          sessionId,
-          sender: "system",
-          content: "Cobrança PIX gerada com sucesso",
-          metadata: {
-            type: "payment_card",
-            orderId: orderResult.orderId,
-            amount: orderResult.amount,
-            pixCode: orderResult.pixCode,
-            pixQrCodeUrl: orderResult.pixQrCodeUrl,
-            status: orderResult.status,
-          },
-        },
-      });
-
-      sessionEvents.broadcast(sessionId, "new_message", paymentMessage);
-    }
-
-    // Stop typing indicator
-    sessionEvents.broadcast(sessionId, "typing_status", { isTyping: false });
+    // 4. Queue AI response with debouncing so the user can send multiple messages
+    // The AI will wait ~2.2s of user inactivity and read all consecutive messages together!
+    queueAIMessageGeneration(sessionId, 2200);
 
     return NextResponse.json({
       success: true,
       userMessage,
-      agentMessages: createdAgentMessages,
-      paymentMessage,
-      paymentOrder,
     });
   } catch (error) {
     console.error("Error in POST /api/chat/messages:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
-

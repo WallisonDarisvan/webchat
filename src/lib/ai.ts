@@ -1,15 +1,17 @@
-import { getAppConfig } from "./config";
+import { getAppConfig, MediaItem, DEFAULT_MEDIA_INSTRUCTIONS } from "./config";
 import { splitIntoBubbles } from "./humanizer";
 
 export interface ChatHistoryItem {
   sender: "user" | "agent" | "system";
   content: string;
+  imageUrl?: string;
 }
 
 export interface AIResponseResult {
   rawText: string;
   bubbles: string[];
   shouldGeneratePayment: boolean;
+  mediaIdToSend: string | null;
   isFallback: boolean;
 }
 
@@ -23,38 +25,136 @@ export async function generateAIResponse(params: {
   userName: string;
   history: ChatHistoryItem[];
   userMessage: string;
+  imageUrl?: string;
+  systemDirective?: string;
 }): Promise<AIResponseResult> {
   const config = await getAppConfig();
+
+  // Parse media catalog
+  let mediaCatalogItems: MediaItem[] = [];
+  try {
+    mediaCatalogItems = JSON.parse(config.mediaCatalog || "[]");
+  } catch {}
 
   // If no API key configured, use a sensible simulation/contingency mode
   if (!config.aiApiKey) {
     console.warn("AI API Key not set. Using intelligent simulated attendant response.");
-    const simulated = simulateAttendantResponse(params.userMessage, params.userName, config.productPrice);
+    const simulated = simulateAttendantResponse(
+      params.userMessage,
+      params.userName,
+      config.productPrice,
+      params.imageUrl,
+      mediaCatalogItems
+    );
     return simulated;
   }
 
+  // Count how many media photos the agent has already sent in this session
+  const agentPhotosSent = params.history.filter(
+    (h) => h.sender === "agent" && Boolean(h.imageUrl)
+  ).length;
+  const maxAgentPhotos = typeof config.maxAgentPhotos === "number" ? config.maxAgentPhotos : 3;
+  const isAgentQuotaExhausted = agentPhotosSent >= maxAgentPhotos;
+
+  // Format media section for the prompt
+  let mediaSection = "";
+  if (isAgentQuotaExhausted) {
+    mediaSection = `\n\nSTATUS DE MÍDIAS:
+ATENÇÃO: Você já enviou o limite máximo de ${maxAgentPhotos} foto(s)/amostra(s) para este cliente (${agentPhotosSent}/${maxAgentPhotos}).
+Você NÃO TEM PERMISSÃO de enviar mais nenhuma foto. NÃO use a tag [ENVIAR_MIDIA] sob nenhuma hipótese.
+Se o cliente pedir mais fotos ou amostras, diga educadamente e com segurança que já compartilhou as amostras oficiais disponíveis e conduza a conversa para fechar o acesso completo com [GERAR_PAGAMENTO].`;
+  } else if (mediaCatalogItems.length > 0) {
+    mediaSection = `\n\nCATÁLOGO DE MÍDIAS E INSTRUÇÕES DE DISPARO:
+Cota de fotos: Você já enviou ${agentPhotosSent} de no máximo ${maxAgentPhotos} foto(s) permitidas para este atendimento.
+${config.mediaInstructions || DEFAULT_MEDIA_INSTRUCTIONS}
+
+Mídias que você tem permissão de enviar:
+${mediaCatalogItems
+  .map(
+    (m) =>
+      `- Mídia [ID: ${m.id}]: "${m.title}". ${
+        m.description ? `Detalhes: ${m.description}. ` : ""
+      }Instrução de Disparo: ${m.triggerInstruction}. Para enviar esta imagem ao cliente, adicione exatamente no final do seu texto a tag: [ENVIAR_MIDIA:${m.id}]`
+  )
+  .join("\n")}`;
+  }
+
+  // Replace [NOME] and [TEMPO] variables
+  const effectiveAgentName = config.agentName || "Gabriel Siqueira";
+  const postPurchaseTimeStr = `${config.postPurchaseMinutes || 10} minutos`;
+  const processedPrompt = config.systemPrompt
+    .replace(/\[NOME\]/g, effectiveAgentName)
+    .replace(/\[TEMPO\]/g, postPurchaseTimeStr);
+
+  let directiveSection = "";
+  if (params.systemDirective) {
+    directiveSection = `\n\n🚨 INSTRUÇÃO DO SISTEMA:\n${params.systemDirective}\nExecute esta instrução imediatamente mantendo total naturalidade em primeira pessoa e sem sair do personagem.`;
+  }
+
   // Build OpenAI-compatible chat payload
-  const systemMessage = `${config.systemPrompt}
+  const systemMessage = `${processedPrompt}
   
-Informações do visitante e contexto atual:
+Informações do atendente, visitante e contexto atual:
+- Seu Nome (Atendente): ${effectiveAgentName}
 - Nome do visitante: ${params.userName || "Cliente"}
 - Nome do Produto: ${config.productName}
 - Preço do Produto: R$ ${config.productPrice.toFixed(2)}
-- Lembre-se: quando o cliente concordar em comprar ou pedir para pagar, inclua no final do seu texto a tag [GERAR_PAGAMENTO]. NUNCA invente links de download falsos.`;
+- Lembre-se: quando o cliente concordar em comprar ou pedir para pagar, inclua no final do seu texto a tag [GERAR_PAGAMENTO]. NUNCA invente links de download falsos.
+- Se o cliente enviar imagens ou fotos (comprovantes, prints, fotos de produtos ou dúvidas), analise com atenção os elementos visuais e responda de forma natural e precisa.${mediaSection}${directiveSection}`;
 
-  // Format history messages
+  // Format history messages into OpenAI/DeepSeek multimodal format
   const apiMessages = [
     { role: "system", content: systemMessage },
-    ...params.history.slice(-10).map((h) => ({
-      role: h.sender === "user" ? "user" : "assistant",
-      content: h.content.replace(/\[GERAR_PAGAMENTO\]/g, "").trim(),
-    })),
-    { role: "user", content: params.userMessage },
+    ...params.history.slice(-8).map((h) => {
+      const cleanContent = h.content
+        .replace(/\[GERAR_PAGAMENTO\]/g, "")
+        .replace(/\[ENVIAR_MIDIA:[^\]]+\]/g, "")
+        .trim();
+
+      if (h.sender === "user" && h.imageUrl) {
+        return {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: cleanContent || "Veja a foto anexada:",
+            },
+            {
+              type: "image_url",
+              image_url: {
+                url: h.imageUrl,
+              },
+            },
+          ],
+        };
+      }
+
+      return {
+        role: h.sender === "user" ? "user" : "assistant",
+        content: cleanContent || "Olá",
+      };
+    }),
   ];
 
-  // Call API with 10s timeout
+  // Guarantee valid dialogue turn: the last message to the model must always be from the user
+  while (apiMessages.length > 1 && apiMessages[apiMessages.length - 1].role === "assistant") {
+    apiMessages.pop();
+  }
+
+  // If there are no user messages to respond to, abort
+  if (apiMessages.length <= 1) {
+    return {
+      rawText: "",
+      bubbles: [],
+      shouldGeneratePayment: false,
+      mediaIdToSend: null,
+      isFallback: false,
+    };
+  }
+
+  // Call API with 12s timeout for multimodal processing
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10000);
+  const timeoutId = setTimeout(() => controller.abort(), 12000);
 
   try {
     const endpoint = config.aiBaseUrl.replace(/\/+$/, "") + "/chat/completions";
@@ -69,7 +169,11 @@ Informações do visitante e contexto atual:
         model: config.aiModel || "deepseek-chat",
         messages: apiMessages,
         temperature: config.aiTemperature ?? 0.75,
-        max_tokens: 500,
+        max_tokens: 600,
+        enable_thinking: false,
+        reasoning: {
+          enabled: false,
+        },
       }),
       signal: controller.signal,
     });
@@ -102,20 +206,28 @@ Informações do visitante e contexto atual:
       rawText: fallbackText,
       bubbles: splitIntoBubbles(fallbackText),
       shouldGeneratePayment: false,
+      mediaIdToSend: null,
       isFallback: true,
     };
   }
 }
 
 /**
- * Process raw AI text: inspect control tag [GERAR_PAGAMENTO] and split into multi-bubbles
+ * Process raw AI text: inspect control tags [GERAR_PAGAMENTO] & [ENVIAR_MIDIA:id]
  */
 function processAIContent(rawContent: string): AIResponseResult {
   const paymentTagRegex = /\[GERAR_PAGAMENTO\]/i;
   const shouldGeneratePayment = paymentTagRegex.test(rawContent);
 
-  // Clean the tag out of user-facing text
-  const cleanedText = rawContent.replace(paymentTagRegex, "").trim();
+  const mediaTagRegex = /\[ENVIAR_MIDIA:([a-zA-Z0-9_-]+)\]/i;
+  const mediaMatch = rawContent.match(mediaTagRegex);
+  const mediaIdToSend = mediaMatch ? mediaMatch[1] : null;
+
+  // Clean tags out of user-facing text
+  const cleanedText = rawContent
+    .replace(paymentTagRegex, "")
+    .replace(mediaTagRegex, "")
+    .trim();
 
   // Split into 1 to 3 conversational bubbles
   const bubbles = splitIntoBubbles(cleanedText);
@@ -124,20 +236,46 @@ function processAIContent(rawContent: string): AIResponseResult {
     rawText: cleanedText,
     bubbles: bubbles.length > 0 ? bubbles : [cleanedText],
     shouldGeneratePayment,
+    mediaIdToSend,
     isFallback: false,
   };
 }
 
 /**
  * Intelligent simulation fallback when no external AI key is entered yet.
- * Allows instant out-of-the-box testing!
  */
 function simulateAttendantResponse(
   userMsg: string,
   userName: string,
-  price: number
+  price: number,
+  imageUrl?: string,
+  mediaCatalog: MediaItem[] = []
 ): AIResponseResult {
-  const lower = userMsg.toLowerCase();
+  if (imageUrl) {
+    const text = `Recebi a sua foto aqui com sucesso, ${userName}! Deixa eu dar uma olhada nela com calma pra te orientar da melhor forma. Você quer me explicar mais algum detalhe sobre o que tá na imagem?`;
+    return processAIContent(text);
+  }
+
+  const lower = (userMsg || "").toLowerCase();
+
+  // If user asks for proof / sample and media exists, test trigger
+  if (
+    (lower.includes("amostra") ||
+      lower.includes("prova") ||
+      lower.includes("print") ||
+      lower.includes("funciona") ||
+      lower.includes("exemplo")) &&
+    mediaCatalog.length > 0
+  ) {
+    const targetMedia = mediaCatalog[0];
+    const text = `Olha só, ${userName}! Deixa eu te mostrar na prática um exemplo real de como funciona: [ENVIAR_MIDIA:${targetMedia.id}]`;
+    return processAIContent(text);
+  }
+
+  if (lower.includes("acabou de entrar") || lower.includes("boas-vindas") || lower.includes("se apresentou")) {
+    const text = `Opa, ${userName}! Seja muito bem-vindo por aqui. Eu sou o Gabriel, tô à sua disposição! Me conta: o que te trouxe aqui hoje?`;
+    return processAIContent(text);
+  }
 
   if (
     lower.includes("comprar") ||
@@ -171,4 +309,3 @@ function simulateAttendantResponse(
   const text = `Entendi perfeitamente, ${userName}. O objetivo principal aqui é te economizar tempo e destravar seus resultados direto ao ponto, sem enrolação. Se tiver qualquer dúvida pontual, me fala que eu te explico agora!`;
   return processAIContent(text);
 }
-

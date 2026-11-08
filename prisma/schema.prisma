@@ -8,15 +8,18 @@ generator client {
 }
 
 model ChatSession {
-  id        String        @id @default(uuid())
-  deviceId  String        @unique @map("device_id")
-  userName  String        @map("user_name")
-  lastIp    String?       @map("last_ip")
-  userAgent String?       @map("user_agent")
-  createdAt DateTime      @default(now()) @map("created_at")
-  updatedAt DateTime      @updatedAt @map("updated_at")
-  messages  ChatMessage[]
-  orders    Order[]
+  id            String        @id @default(uuid())
+  deviceId      String        @unique @map("device_id")
+  userName      String        @map("user_name")
+  lastIp        String?       @map("last_ip")
+  userAgent     String?       @map("user_agent")
+  lockedUntil   DateTime?     @map("locked_until")
+  lockReason    String?       @map("lock_reason")
+  returnHandled Boolean       @default(false) @map("return_handled")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  messages      ChatMessage[]
+  orders        Order[]
 
   @@index([deviceId])
   @@map("chat_sessions")
@@ -61,12 +64,20 @@ model AppConfig {
   aiModel              String   @default("deepseek-chat") @map("ai_model")
   aiTemperature        Float    @default(0.75) @map("ai_temperature")
   systemPrompt         String   @default("") @map("system_prompt")
+  agentName            String   @default("Gabriel Siqueira") @map("agent_name")
+  agentAvatar          String   @default("") @map("agent_avatar")
   productName          String   @default("Método Alta Conversão") @map("product_name")
   productPrice         Float    @default(97.00) @map("product_price")
   productDeliveryLink  String   @default("https://seusite.com/download/acesso-vip") @map("product_delivery_link")
   paymentGateway       String   @default("simulated") @map("payment_gateway")
   paymentGatewayToken  String   @default("") @map("payment_gateway_token")
   paymentWebhookSecret String   @default("") @map("payment_webhook_secret")
+  mediaCatalog         String   @default("[]") @map("media_catalog")
+  mediaInstructions    String   @default("") @map("media_instructions")
+  maxAgentPhotos       Int      @default(3) @map("max_agent_photos")
+  postPurchaseMinutes  Int      @default(10) @map("post_purchase_minutes")
+  nonPurchaseMinutes   Int      @default(15) @map("non_purchase_minutes")
+  cooldownHours        Int      @default(24) @map("cooldown_hours")
   updatedAt            DateTime @updatedAt @map("updated_at")
 
   @@map("app_configs")

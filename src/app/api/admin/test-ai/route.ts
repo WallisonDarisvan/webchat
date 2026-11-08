@@ -29,6 +29,10 @@ export async function POST(req: NextRequest) {
           { role: "user", content: "Teste de conexão" },
         ],
         max_tokens: 15,
+        enable_thinking: false,
+        reasoning: {
+          enabled: false,
+        },
       }),
       signal: controller.signal,
     });

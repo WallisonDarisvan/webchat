@@ -15,11 +15,29 @@ export interface MessageData {
 interface ChatBubbleProps {
   message: MessageData;
   onSimulatePayment?: (orderId: string) => void;
+  onOpenViewOnce?: (messageId: string, imageUrl: string) => void;
+  agentName?: string;
+  agentAvatar?: string;
 }
 
-export function ChatBubble({ message, onSimulatePayment }: ChatBubbleProps) {
+function getInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase() || "GS";
+}
+
+export function ChatBubble({
+  message,
+  onSimulatePayment,
+  onOpenViewOnce,
+  agentName = "Gabriel Siqueira",
+  agentAvatar,
+}: ChatBubbleProps) {
   const isUser = message.sender === "user";
   const isSystem = message.sender === "system";
+  const initials = getInitials(agentName);
 
   // Check if it's a payment card message
   if (isSystem && message.metadata?.type === "payment_card") {
@@ -43,9 +61,39 @@ export function ChatBubble({ message, onSimulatePayment }: ChatBubbleProps) {
     minute: "2-digit",
   });
 
+  // Extract attached image if present in metadata
+  let imageUrl: string | null = null;
+  if (message.metadata) {
+    if (typeof message.metadata === "object" && message.metadata.imageUrl) {
+      imageUrl = message.metadata.imageUrl;
+    } else if (typeof message.metadata === "string") {
+      try {
+        const parsed = JSON.parse(message.metadata);
+        if (parsed?.imageUrl) imageUrl = parsed.imageUrl;
+      } catch {}
+    }
+  }
+
+  // Do not show title text for agent media messages (render pure photo)
+  const isAgentMedia =
+    message.metadata?.type === "agent_media" ||
+    (typeof message.metadata === "string" && message.metadata.includes('"type":"agent_media"'));
+  const hasVisibleText = Boolean(message.content?.trim()) && !isAgentMedia;
+
+  // View once status
+  let isViewOnce = false;
+  let isViewed = false;
+  if (message.metadata) {
+    try {
+      const meta = typeof message.metadata === "object" ? message.metadata : JSON.parse(message.metadata);
+      isViewOnce = Boolean(meta.viewOnce);
+      isViewed = Boolean(meta.viewed);
+    } catch {}
+  }
+
   // Render text and detect links
   const renderFormattedContent = (content: string) => {
-    // URL detector regex
+    if (!content) return null;
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const parts = content.split(urlRegex);
 
@@ -76,8 +124,12 @@ export function ChatBubble({ message, onSimulatePayment }: ChatBubbleProps) {
     >
       {/* Attendant avatar on the left for agent messages */}
       {!isUser && (
-        <div className="w-7 h-7 rounded-full bg-emerald-700/40 border border-emerald-500/30 flex items-center justify-center text-[10px] font-bold text-emerald-300 shrink-0 mb-1">
-          GS
+        <div className="w-7 h-7 rounded-full bg-emerald-700/40 border border-emerald-500/30 flex items-center justify-center text-[10px] font-bold text-emerald-300 shrink-0 mb-1 overflow-hidden">
+          {agentAvatar ? (
+            <img src={agentAvatar} alt={agentName} className="w-full h-full object-cover" />
+          ) : (
+            initials
+          )}
         </div>
       )}
 
@@ -89,9 +141,69 @@ export function ChatBubble({ message, onSimulatePayment }: ChatBubbleProps) {
             : "bg-[#202c33] text-[#e9edef] rounded-bl-sm border border-[#26353d]"
         }`}
       >
-        <div className="whitespace-pre-wrap break-words">
-          {renderFormattedContent(message.content)}
-        </div>
+        {/* Render View-Once WhatsApp pill */}
+        {isViewOnce ? (
+          <div className="py-0.5">
+            {!isViewed ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (imageUrl && onOpenViewOnce) {
+                    onOpenViewOnce(message.id, imageUrl);
+                  }
+                }}
+                className="flex items-center gap-3 py-1.5 px-2.5 -mx-1 bg-[#182229]/60 hover:bg-[#26353d] border border-emerald-500/30 rounded-xl transition-all text-left group cursor-pointer"
+              >
+                <div className="w-8 h-8 rounded-full border-2 border-dashed border-emerald-400 text-emerald-400 font-bold text-xs flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform bg-emerald-500/10">
+                  1
+                </div>
+                <div className="flex-1 min-w-0 pr-2">
+                  <div className="text-sm font-semibold text-white flex items-center gap-1.5">
+                    <span>Foto</span>
+                    <span className="text-[10px] text-emerald-300 font-normal px-1.5 py-0.2 rounded-full bg-emerald-500/20">
+                      Abrir
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-[#8696a0] block truncate">
+                    Visualização única
+                  </span>
+                </div>
+              </button>
+            ) : (
+              <div className="flex items-center gap-3 py-1.5 px-2.5 -mx-1 bg-[#182229]/40 border border-[#26353d]/50 rounded-xl select-none opacity-60">
+                <div className="w-8 h-8 rounded-full border-2 border-solid border-[#8696a0]/50 text-[#8696a0] text-xs font-semibold flex items-center justify-center shrink-0 bg-[#202c33]">
+                  1
+                </div>
+                <div className="flex-1 min-w-0 pr-2">
+                  <div className="text-sm font-medium text-[#8696a0]">
+                    Mensagem aberta
+                  </div>
+                  <span className="text-[11px] text-[#8696a0]/60 block truncate">
+                    Foto expirada
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Render normal attached image if available */
+          imageUrl && (
+            <div className={`${hasVisibleText ? "mb-2" : ""} overflow-hidden rounded-xl bg-black/30 border border-black/20`}>
+              <img
+                src={imageUrl}
+                alt="Foto enviada"
+                className="max-h-72 w-full object-contain cursor-pointer hover:opacity-95 transition-opacity"
+                onClick={() => window.open(imageUrl!, "_blank")}
+              />
+            </div>
+          )
+        )}
+
+        {hasVisibleText && (
+          <div className="whitespace-pre-wrap break-words">
+            {renderFormattedContent(message.content)}
+          </div>
+        )}
 
         {/* Timestamp and status check */}
         <div className="flex items-center justify-end gap-1 mt-1 text-[10px] text-[#8696a0]/80 float-right ml-3 -mb-1">
@@ -102,4 +214,3 @@ export function ChatBubble({ message, onSimulatePayment }: ChatBubbleProps) {
     </div>
   );
 }
-

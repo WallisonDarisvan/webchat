@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import {
   Settings,
@@ -21,8 +21,15 @@ import {
   ExternalLink,
   ShieldAlert,
   Zap,
+  Image as ImageIcon,
+  Plus,
+  Trash2,
+  Upload,
+  AlertCircle,
+  Clock,
 } from "lucide-react";
-import { DEFAULT_SYSTEM_PROMPT } from "@/lib/config";
+import { DEFAULT_SYSTEM_PROMPT, DEFAULT_MEDIA_INSTRUCTIONS, MediaItem } from "@/lib/config";
+import { optimizeImageForVision } from "@/lib/image-optimizer";
 
 interface AdminConfig {
   aiBaseUrl: string;
@@ -30,12 +37,20 @@ interface AdminConfig {
   aiModel: string;
   aiTemperature: number;
   systemPrompt: string;
+  agentName: string;
+  agentAvatar: string;
   productName: string;
   productPrice: number;
   productDeliveryLink: string;
   paymentGateway: string;
   paymentGatewayToken: string;
   paymentWebhookSecret: string;
+  mediaCatalog: string; // JSON string of MediaItem[]
+  mediaInstructions: string;
+  maxAgentPhotos: number;
+  postPurchaseMinutes?: number;
+  nonPurchaseMinutes?: number;
+  cooldownHours?: number;
 }
 
 interface StatsData {
@@ -73,7 +88,7 @@ export default function AdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [passwordInput, setPasswordInput] = useState("");
   const [authError, setAuthError] = useState("");
-  const [activeTab, setActiveTab] = useState<"ai" | "prompt" | "product" | "stats">("ai");
+  const [activeTab, setActiveTab] = useState<"ai" | "prompt" | "product" | "stats" | "media">("ai");
 
   // Config Form State
   const [config, setConfig] = useState<AdminConfig>({
@@ -82,13 +97,35 @@ export default function AdminPage() {
     aiModel: "deepseek-chat",
     aiTemperature: 0.75,
     systemPrompt: DEFAULT_SYSTEM_PROMPT,
+    agentName: "Gabriel Siqueira",
+    agentAvatar: "",
     productName: "Método Alta Conversão",
     productPrice: 97.0,
     productDeliveryLink: "https://seusite.com/download/acesso-vip",
     paymentGateway: "simulated",
     paymentGatewayToken: "",
     paymentWebhookSecret: "",
+    mediaCatalog: "[]",
+    mediaInstructions: DEFAULT_MEDIA_INSTRUCTIONS,
+    maxAgentPhotos: 3,
+    postPurchaseMinutes: 10,
+    nonPurchaseMinutes: 15,
+    cooldownHours: 24,
   });
+
+  // Media Management State
+  const [mediaList, setMediaList] = useState<MediaItem[]>([]);
+  const [newMediaTitle, setNewMediaTitle] = useState("");
+  const [newMediaId, setNewMediaId] = useState("");
+  const [newMediaUrl, setNewMediaUrl] = useState("");
+  const [newMediaDesc, setNewMediaDesc] = useState("");
+  const [newMediaTrigger, setNewMediaTrigger] = useState("");
+  const [newMediaViewOnce, setNewMediaViewOnce] = useState(false);
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false);
+  const [mediaTagCopied, setMediaTagCopied] = useState<string | null>(null);
+  const mediaFileInputRef = useRef<HTMLInputElement>(null);
+  const avatarFileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
   const [statsData, setStatsData] = useState<StatsData | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
@@ -155,6 +192,12 @@ export default function AdminPage() {
       if (res.ok) {
         const data = await res.json();
         setConfig(data.config);
+        try {
+          const parsedMedia: MediaItem[] = JSON.parse(data.config.mediaCatalog || "[]");
+          setMediaList(parsedMedia);
+        } catch {
+          setMediaList([]);
+        }
       }
     } catch (err) {
       console.error("Error loading config:", err);
@@ -179,10 +222,15 @@ export default function AdminPage() {
     setSaveSuccess(false);
 
     try {
+      const payloadToSave = {
+        ...config,
+        mediaCatalog: JSON.stringify(mediaList),
+      };
+
       const res = await fetch("/api/admin/config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(config),
+        body: JSON.stringify(payloadToSave),
       });
 
       if (!res.ok) throw new Error("Erro ao salvar");
@@ -218,7 +266,7 @@ export default function AdminPage() {
       } else {
         setAiTestResult({ success: false, message: data.error || "Falha na comunicação" });
       }
-    } catch (err) {
+    } catch {
       setAiTestResult({ success: false, message: "Erro de conexão ao testar IA" });
     } finally {
       setIsTestingAi(false);
@@ -230,6 +278,119 @@ export default function AdminPage() {
     navigator.clipboard.writeText(url);
     setWebhookCopied(true);
     setTimeout(() => setWebhookCopied(false), 2500);
+  };
+
+  // Auto-slugify title to ID
+  const handleTitleChange = (val: string) => {
+    setNewMediaTitle(val);
+    if (!newMediaId || newMediaId === slugify(newMediaTitle)) {
+      setNewMediaId(slugify(val));
+    }
+  };
+
+  const slugify = (text: string) => {
+    return text
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  };
+
+  const handleUploadMediaFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingMedia(true);
+    try {
+      const optimized = await optimizeImageForVision(file);
+      setNewMediaUrl(optimized.dataUrl);
+      if (!newMediaTitle) {
+        const cleanName = file.name.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
+        setNewMediaTitle(cleanName);
+        setNewMediaId(slugify(cleanName));
+      }
+    } catch (err) {
+      console.error("Erro ao processar imagem:", err);
+      alert("Não foi possível carregar a imagem.");
+    } finally {
+      setIsUploadingMedia(false);
+      if (mediaFileInputRef.current) mediaFileInputRef.current.value = "";
+    }
+  };
+
+  const handleUploadAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingAvatar(true);
+    try {
+      const optimized = await optimizeImageForVision(file);
+      setConfig((prev) => ({ ...prev, agentAvatar: optimized.dataUrl }));
+    } catch (err) {
+      console.error("Erro ao processar avatar:", err);
+      alert("Não foi possível carregar a foto do atendente.");
+    } finally {
+      setIsUploadingAvatar(false);
+      if (avatarFileInputRef.current) avatarFileInputRef.current.value = "";
+    }
+  };
+
+  const handleAddMedia = () => {
+    if (!newMediaTitle.trim() || !newMediaUrl.trim() || !newMediaTrigger.trim()) {
+      alert("Preencha o título, a imagem e a instrução de quando a IA deve enviar.");
+      return;
+    }
+
+    const cleanId = (newMediaId.trim() || slugify(newMediaTitle)).toLowerCase();
+
+    if (mediaList.some((m) => m.id === cleanId)) {
+      alert("Já existe uma mídia com este Identificador (ID). Escolha outro.");
+      return;
+    }
+
+    const item: MediaItem = {
+      id: cleanId,
+      title: newMediaTitle.trim(),
+      url: newMediaUrl.trim(),
+      description: newMediaDesc.trim() || undefined,
+      triggerInstruction: newMediaTrigger.trim(),
+      viewOnce: newMediaViewOnce,
+    };
+
+    const updated = [...mediaList, item];
+    setMediaList(updated);
+    setConfig((prev) => ({ ...prev, mediaCatalog: JSON.stringify(updated) }));
+
+    // Reset form
+    setNewMediaTitle("");
+    setNewMediaId("");
+    setNewMediaUrl("");
+    setNewMediaDesc("");
+    setNewMediaTrigger("");
+    setNewMediaViewOnce(false);
+  };
+
+  const handleDeleteMedia = (id: string) => {
+    if (confirm(`Deseja remover a mídia "${id}"?`)) {
+      const updated = mediaList.filter((m) => m.id !== id);
+      setMediaList(updated);
+      setConfig((prev) => ({ ...prev, mediaCatalog: JSON.stringify(updated) }));
+    }
+  };
+
+  const handleToggleMediaViewOnce = (id: string) => {
+    const updated = mediaList.map((m) =>
+      m.id === id ? { ...m, viewOnce: !m.viewOnce } : m
+    );
+    setMediaList(updated);
+    setConfig((prev) => ({ ...prev, mediaCatalog: JSON.stringify(updated) }));
+  };
+
+  const copyTag = (tag: string) => {
+    navigator.clipboard.writeText(tag);
+    setMediaTagCopied(tag);
+    setTimeout(() => setMediaTagCopied(null), 2000);
   };
 
   if (isAuthenticated === null) {
@@ -319,7 +480,7 @@ export default function AdminPage() {
               </span>
             </h1>
             <p className="text-xs text-[#8696a0]">
-              Gerenciamento de IA, Vendas e Gatilhos de Entrega
+              Gerenciamento de IA, Mídias, Vendas e Gatilhos
             </p>
           </div>
         </div>
@@ -382,6 +543,23 @@ export default function AdminPage() {
           </button>
 
           <button
+            onClick={() => setActiveTab("media")}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all ${
+              activeTab === "media"
+                ? "bg-emerald-600 text-white shadow-md shadow-emerald-950"
+                : "bg-[#182229] text-[#8696a0] hover:text-white hover:bg-[#202c33]"
+            }`}
+          >
+            <ImageIcon className="w-4 h-4" />
+            <span>3. Mídias & Instruções</span>
+            {mediaList.length > 0 && (
+              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-emerald-400/20 text-emerald-300 font-bold">
+                {mediaList.length}
+              </span>
+            )}
+          </button>
+
+          <button
             onClick={() => setActiveTab("product")}
             className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all ${
               activeTab === "product"
@@ -390,7 +568,7 @@ export default function AdminPage() {
             }`}
           >
             <DollarSign className="w-4 h-4" />
-            <span>3. Produto & Pagamento</span>
+            <span>4. Produto & Pagamento</span>
           </button>
 
           <button
@@ -405,7 +583,7 @@ export default function AdminPage() {
             }`}
           >
             <BarChart3 className="w-4 h-4" />
-            <span>4. Vendas & Auditoria</span>
+            <span>5. Vendas & Auditoria</span>
           </button>
         </div>
 
@@ -424,7 +602,6 @@ export default function AdminPage() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Base URL */}
                 <div>
                   <label className="block text-xs font-medium text-[#8696a0] mb-1.5">
                     Endpoint Base URL
@@ -441,7 +618,6 @@ export default function AdminPage() {
                   </span>
                 </div>
 
-                {/* Model */}
                 <div>
                   <label className="block text-xs font-medium text-[#8696a0] mb-1.5">
                     Nome do Modelo
@@ -458,7 +634,6 @@ export default function AdminPage() {
                   </span>
                 </div>
 
-                {/* API Key */}
                 <div className="md:col-span-2">
                   <label className="block text-xs font-medium text-[#8696a0] mb-1.5">
                     Chave de API (API Key)
@@ -481,7 +656,6 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                {/* Temperature */}
                 <div className="md:col-span-2">
                   <div className="flex justify-between items-center mb-1.5">
                     <label className="text-xs font-medium text-[#8696a0]">
@@ -509,7 +683,6 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {/* Test AI Connection Button */}
               <div className="pt-3 border-t border-[#222e35] flex items-center justify-between flex-wrap gap-3">
                 <button
                   type="button"
@@ -562,11 +735,10 @@ export default function AdminPage() {
                 </button>
               </div>
 
-              {/* Anti-bot rules badge */}
               <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs text-emerald-300 space-y-1">
                 <p className="font-semibold flex items-center gap-1.5">
                   <Zap className="w-4 h-4 text-emerald-400" />
-                  <span>Regra de Disparo Automático:</span>
+                  <span>Gatilho de Pagamento Automático:</span>
                 </p>
                 <p className="text-emerald-200/80">
                   Quando o cliente concordar em pagar ou pedir a compra, a IA emitirá a tag{" "}
@@ -577,11 +749,259 @@ export default function AdminPage() {
                 </p>
               </div>
 
+              {/* Agent Name Configuration & [NOME] tag */}
+              <div className="p-4 bg-[#182229] border border-[#222e35] rounded-xl space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex-1">
+                    <label className="block text-xs font-semibold text-white mb-1">
+                      Nome do Atendente
+                    </label>
+                    <input
+                      type="text"
+                      value={config.agentName}
+                      onChange={(e) => setConfig({ ...config, agentName: e.target.value })}
+                      placeholder="Ex: Gabriel Siqueira"
+                      className="w-full sm:w-80 px-3.5 py-2.5 bg-[#202c33] border border-[#26353d] focus:border-emerald-500 rounded-xl text-xs sm:text-sm text-white outline-none"
+                    />
+                  </div>
+
+                  <div className="flex flex-col items-start sm:items-end">
+                    <span className="text-xs text-[#8696a0] mb-1">Variáveis Dinâmicas:</span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const textarea = document.getElementById("systemPromptTextarea") as HTMLTextAreaElement;
+                          if (textarea) {
+                            const start = textarea.selectionStart || 0;
+                            const end = textarea.selectionEnd || 0;
+                            const text = config.systemPrompt;
+                            const updated = text.substring(0, start) + "[NOME]" + text.substring(end);
+                            setConfig({ ...config, systemPrompt: updated });
+                            setTimeout(() => {
+                              textarea.focus();
+                              textarea.setSelectionRange(start + 6, start + 6);
+                            }, 50);
+                          } else {
+                            setConfig({ ...config, systemPrompt: config.systemPrompt + " [NOME]" });
+                          }
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-mono text-xs hover:bg-emerald-500/25 transition-colors cursor-pointer"
+                        title="Clique para inserir [NOME] no prompt"
+                      >
+                        <span>+ Inserir [NOME]</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const textarea = document.getElementById("systemPromptTextarea") as HTMLTextAreaElement;
+                          if (textarea) {
+                            const start = textarea.selectionStart || 0;
+                            const end = textarea.selectionEnd || 0;
+                            const text = config.systemPrompt;
+                            const updated = text.substring(0, start) + "[TEMPO]" + text.substring(end);
+                            setConfig({ ...config, systemPrompt: updated });
+                            setTimeout(() => {
+                              textarea.focus();
+                              textarea.setSelectionRange(start + 7, start + 7);
+                            }, 50);
+                          } else {
+                            setConfig({ ...config, systemPrompt: config.systemPrompt + " [TEMPO]" });
+                          }
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-teal-500/15 border border-teal-500/30 text-teal-400 font-mono text-xs hover:bg-teal-500/25 transition-colors cursor-pointer"
+                        title="Clique para inserir [TEMPO] no prompt"
+                      >
+                        <span>+ Inserir [TEMPO]</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Upload Foto da Atendente */}
+                <div className="pt-3 border-t border-[#222e35] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3.5">
+                    {/* Avatar Preview */}
+                    <div className="relative w-12 h-12 rounded-full overflow-hidden bg-[#202c33] border-2 border-emerald-500/40 flex items-center justify-center shrink-0 shadow-md">
+                      {config.agentAvatar ? (
+                        <img
+                          src={config.agentAvatar}
+                          alt="Foto da Atendente"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-sm font-bold text-emerald-400">
+                          {config.agentName
+                            ? config.agentName
+                                .trim()
+                                .split(/\s+/)
+                                .slice(0, 2)
+                                .map((s) => s[0])
+                                .join("")
+                                .toUpperCase()
+                            : "AT"}
+                        </span>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-white">
+                        Foto da Atendente (Avatar de Perfil)
+                      </label>
+                      <p className="text-[11px] text-[#8696a0] mt-0.5">
+                        Essa foto aparecerá no cabeçalho, nas mensagens e no indicador de digitação do chat.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      ref={avatarFileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleUploadAvatar}
+                      className="hidden"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => avatarFileInputRef.current?.click()}
+                      disabled={isUploadingAvatar}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-medium transition-colors disabled:opacity-50 shadow-md shadow-emerald-950"
+                    >
+                      {isUploadingAvatar ? (
+                        <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <Upload className="w-3.5 h-3.5" />
+                      )}
+                      <span>{config.agentAvatar ? "Trocar Foto" : "Fazer Upload da Foto"}</span>
+                    </button>
+
+                    {config.agentAvatar && (
+                      <button
+                        type="button"
+                        onClick={() => setConfig({ ...config, agentAvatar: "" })}
+                        className="p-2 text-[#8696a0] hover:text-red-400 hover:bg-[#202c33] rounded-xl transition-colors text-xs"
+                        title="Remover foto (usar iniciais)"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-[#8696a0]">
+                  As tags <code className="bg-[#202c33] text-emerald-300 px-1 py-0.5 rounded font-mono">[NOME]</code> e <code className="bg-[#202c33] text-teal-300 px-1 py-0.5 rounded font-mono">[TEMPO]</code> serão substituídas automaticamente pelo nome do atendente e pelo tempo de conversa configurados.
+                </p>
+              </div>
+
+              {/* Ciclo de Conversa & Finalização Automática */}
+              <div className="p-4 bg-[#182229] border border-[#222e35] rounded-xl space-y-4">
+                <div className="flex items-center gap-2 border-b border-[#222e35] pb-3">
+                  <Clock className="w-4 h-4 text-emerald-400" />
+                  <h3 className="text-xs font-semibold text-white">
+                    Ciclo de Conversa & Encerramento Automático (Desculpa do Namorado)
+                  </h3>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-[#8696a0] mb-1">
+                      Tempo Pós-Venda (Comprou)
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={1}
+                        max={120}
+                        value={config.postPurchaseMinutes ?? 10}
+                        onChange={(e) =>
+                          setConfig({
+                            ...config,
+                            postPurchaseMinutes: parseInt(e.target.value) || 10,
+                          })
+                        }
+                        className="w-full px-3.5 py-2.5 bg-[#202c33] border border-[#26353d] focus:border-emerald-500 rounded-xl text-xs sm:text-sm text-white outline-none"
+                      />
+                      <span className="text-xs text-[#8696a0]">minutos</span>
+                    </div>
+                    <p className="text-[11px] text-[#8696a0] mt-1">
+                      Tempo de conversa pós-PIX antes de acionar a despedida.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-[#8696a0] mb-1">
+                      Tempo Máximo (Não Comprou)
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={1}
+                        max={120}
+                        value={config.nonPurchaseMinutes ?? 15}
+                        onChange={(e) =>
+                          setConfig({
+                            ...config,
+                            nonPurchaseMinutes: parseInt(e.target.value) || 15,
+                          })
+                        }
+                        className="w-full px-3.5 py-2.5 bg-[#202c33] border border-[#26353d] focus:border-emerald-500 rounded-xl text-xs sm:text-sm text-white outline-none"
+                      />
+                      <span className="text-xs text-[#8696a0]">minutos</span>
+                    </div>
+                    <p className="text-[11px] text-[#8696a0] mt-1">
+                      Tempo limite se o visitante não gerar o pagamento.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-[#8696a0] mb-1">
+                      Bloqueio / Cooldown
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={1}
+                        max={72}
+                        value={config.cooldownHours ?? 24}
+                        onChange={(e) =>
+                          setConfig({
+                            ...config,
+                            cooldownHours: parseInt(e.target.value) || 24,
+                          })
+                        }
+                        className="w-full px-3.5 py-2.5 bg-[#202c33] border border-[#26353d] focus:border-emerald-500 rounded-xl text-xs sm:text-sm text-white outline-none"
+                      />
+                      <span className="text-xs text-[#8696a0]">horas</span>
+                    </div>
+                    <p className="text-[11px] text-[#8696a0] mt-1">
+                      Horas que a atendente fica offline até poder voltar a falar.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-2.5 bg-[#202c33]/70 rounded-lg text-[11px] text-[#8696a0] space-y-1">
+                  <p>
+                    • <strong>Tag [TEMPO]:</strong> Substituída automaticamente por{" "}
+                    <code className="text-teal-400 font-mono">
+                      {config.postPurchaseMinutes ?? 10} minutos
+                    </code>{" "}
+                    no prompt da IA.
+                  </p>
+                  <p>
+                    • <strong>Retorno no Dia Seguinte:</strong> Após o período de bloqueio, quando o cliente mandar mensagem, o backend injeta a instrução secreta apropriada (se comprou: pergunta se gostou das fotinhas; se não comprou: volta a provocar e tenta fechar a venda).
+                  </p>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-medium text-[#8696a0] mb-1.5">
                   Prompt de Sistema Completo
                 </label>
                 <textarea
+                  id="systemPromptTextarea"
                   rows={16}
                   value={config.systemPrompt}
                   onChange={(e) => setConfig({ ...config, systemPrompt: e.target.value })}
@@ -592,7 +1012,320 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Tab 3: Product & Payment Settings */}
+        {/* Tab 3: Mídias & Instruções de Uso na IA (NOVA ABA) */}
+        {activeTab === "media" && (
+          <div className="space-y-6 animate-in fade-in duration-200">
+            {/* General Media Instructions Card */}
+            <div className="bg-[#111b21] border border-[#222e35] rounded-2xl p-6 shadow-xl space-y-4">
+              <div className="flex items-center justify-between border-b border-[#222e35] pb-4">
+                <div>
+                  <h2 className="text-base font-semibold text-white flex items-center gap-2">
+                    <ImageIcon className="w-5 h-5 text-emerald-400" />
+                    <span>Instruções Gerais de Uso de Mídias para a IA</span>
+                  </h2>
+                  <p className="text-xs text-[#8696a0] mt-1">
+                    Essas diretrizes ensinam o modelo como se comportar ao disparar fotos e amostras.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setConfig({ ...config, mediaInstructions: DEFAULT_MEDIA_INSTRUCTIONS })
+                  }
+                  className="text-xs text-[#8696a0] hover:text-emerald-400 transition-colors flex items-center gap-1"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  <span>Restaurar Diretrizes</span>
+                </button>
+              </div>
+
+              <div>
+                <textarea
+                  rows={5}
+                  value={config.mediaInstructions}
+                  onChange={(e) => setConfig({ ...config, mediaInstructions: e.target.value })}
+                  placeholder="Defina regras gerais para o envio de imagens..."
+                  className="w-full px-4 py-3 bg-[#202c33] border border-[#222e35] focus:border-emerald-500 rounded-xl text-xs sm:text-sm text-white font-mono leading-relaxed outline-none resize-y"
+                />
+              </div>
+
+              {/* Max Agent Photos Limit Field */}
+              <div className="pt-3 border-t border-[#222e35] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex-1">
+                  <label className="text-xs font-semibold text-white flex items-center gap-1.5">
+                    <ShieldAlert className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Limite de Fotos que a IA Pode Enviar por Atendimento</span>
+                  </label>
+                  <p className="text-[11px] text-[#8696a0] mt-0.5">
+                    Quantidade máxima de fotos/amostras que a IA tem permissão de disparar para o mesmo cliente. Ao atingir essa cota, o servidor bloqueia sumariamente qualquer novo disparo de mídia.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <input
+                    type="number"
+                    min={0}
+                    max={20}
+                    value={config.maxAgentPhotos}
+                    onChange={(e) =>
+                      setConfig({
+                        ...config,
+                        maxAgentPhotos: Math.max(0, parseInt(e.target.value) || 0),
+                      })
+                    }
+                    className="w-24 px-3 py-2 bg-[#202c33] border border-[#222e35] focus:border-emerald-500 rounded-xl text-center text-sm font-bold text-white outline-none"
+                  />
+                  <span className="text-xs text-[#8696a0]">fotos</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Add New Media Form */}
+            <div className="bg-[#111b21] border border-[#222e35] rounded-2xl p-6 shadow-xl space-y-4">
+              <div className="border-b border-[#222e35] pb-3">
+                <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                  <Plus className="w-4 h-4 text-emerald-400" />
+                  <span>Cadastrar Nova Mídia com Instrução</span>
+                </h3>
+                <p className="text-xs text-[#8696a0] mt-0.5">
+                  Adicione uma foto e diga exatamente em qual momento a IA deve enviá-la para o cliente.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-[#8696a0] mb-1">
+                    Título da Mídia
+                  </label>
+                  <input
+                    type="text"
+                    value={newMediaTitle}
+                    onChange={(e) => handleTitleChange(e.target.value)}
+                    placeholder="Ex: Print de Faturamento Aluno 10k"
+                    className="w-full px-4 py-2.5 bg-[#202c33] border border-[#222e35] focus:border-emerald-500 rounded-xl text-xs sm:text-sm text-white outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-[#8696a0] mb-1">
+                    Identificador (ID do Gatilho)
+                  </label>
+                  <input
+                    type="text"
+                    value={newMediaId}
+                    onChange={(e) => setNewMediaId(slugify(e.target.value))}
+                    placeholder="Ex: print-faturamento-aluno"
+                    className="w-full px-4 py-2.5 bg-[#202c33] border border-[#222e35] focus:border-emerald-500 rounded-xl text-xs sm:text-sm text-white font-mono outline-none"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-medium text-[#8696a0] mb-1">
+                    Imagem da Mídia
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={newMediaUrl}
+                      onChange={(e) => setNewMediaUrl(e.target.value)}
+                      placeholder="Cole a URL direta da imagem ou clique em Enviar Foto..."
+                      className="flex-1 px-4 py-2.5 bg-[#202c33] border border-[#222e35] focus:border-emerald-500 rounded-xl text-xs sm:text-sm text-white outline-none font-mono"
+                    />
+
+                    <input
+                      ref={mediaFileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleUploadMediaFile}
+                      className="hidden"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => mediaFileInputRef.current?.click()}
+                      disabled={isUploadingMedia}
+                      className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-[#202c33] hover:bg-[#26353d] border border-[#26353d] text-white rounded-xl text-xs font-medium transition-colors shrink-0 disabled:opacity-50"
+                    >
+                      {isUploadingMedia ? (
+                        <div className="w-4 h-4 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <>
+                          <Upload className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Fazer Upload</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {newMediaUrl && (
+                    <div className="mt-2 relative w-24 h-24 rounded-lg overflow-hidden border border-[#26353d] bg-black/40">
+                      <img src={newMediaUrl} alt="Preview" className="w-full h-full object-cover" />
+                    </div>
+                  )}
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-medium text-emerald-400 mb-1 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Instrução de Disparo para a IA (Quando enviar?)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={newMediaTrigger}
+                    onChange={(e) => setNewMediaTrigger(e.target.value)}
+                    placeholder="Ex: Envie quando o cliente perguntar se o método realmente dá resultados ou pedir provas reais."
+                    className="w-full px-4 py-2.5 bg-[#202c33] border border-emerald-500/40 focus:border-emerald-500 rounded-xl text-xs sm:text-sm text-white outline-none"
+                  />
+                  <span className="text-[11px] text-[#8696a0] mt-1 block">
+                    A IA lerá essa instrução e incluirá a tag de disparo no momento certo da conversa.
+                  </span>
+                </div>
+
+                {/* View Once Checkbox */}
+                <div className="md:col-span-2 p-3 bg-[#182229] border border-[#26353d] rounded-xl">
+                  <label className="flex items-center gap-3 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={newMediaViewOnce}
+                      onChange={(e) => setNewMediaViewOnce(e.target.checked)}
+                      className="w-4 h-4 rounded bg-[#202c33] border-[#26353d] text-emerald-500 focus:ring-0 focus:ring-offset-0 cursor-pointer accent-emerald-500"
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-white">
+                        <Eye className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Ativar Visualização Única (1x)</span>
+                      </div>
+                      <p className="text-[11px] text-[#8696a0] mt-0.5">
+                        O cliente só poderá abrir e visualizar esta foto uma única vez no chat. Após fechar, a foto expira permanentemente (estilo WhatsApp).
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleAddMedia}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-medium transition-all shadow-md shadow-emerald-950"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Adicionar Mídia ao Catálogo</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Registered Media List */}
+            <div className="bg-[#111b21] border border-[#222e35] rounded-2xl p-6 shadow-xl space-y-4">
+              <div className="flex items-center justify-between border-b border-[#222e35] pb-3">
+                <h3 className="text-sm font-semibold text-white">
+                  Mídias Cadastradas ({mediaList.length})
+                </h3>
+                <span className="text-xs text-[#8696a0]">
+                  Lembre-se de clicar em <strong>Salvar Alterações</strong> no topo para persistir.
+                </span>
+              </div>
+
+              {mediaList.length === 0 ? (
+                <div className="p-8 text-center text-xs text-[#8696a0] border border-dashed border-[#222e35] rounded-xl">
+                  <ImageIcon className="w-8 h-8 text-[#8696a0]/40 mx-auto mb-2" />
+                  <p>Nenhuma mídia cadastrada ainda.</p>
+                  <p className="mt-1">
+                    Cadastre uma foto acima para a IA poder ilustrar suas conversas de vendas!
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {mediaList.map((media) => (
+                    <div
+                      key={media.id}
+                      className="p-4 bg-[#182229] border border-[#222e35] rounded-xl flex gap-3.5 relative overflow-hidden group hover:border-[#26353d] transition-colors"
+                    >
+                      {/* Thumbnail */}
+                      <div className="w-20 h-20 rounded-lg overflow-hidden bg-black/40 border border-[#26353d] shrink-0">
+                        <img
+                          src={media.url}
+                          alt={media.title}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+
+                      {/* Content */}
+                      <div className="flex-1 min-w-0 pr-6">
+                        <h4 className="text-xs font-bold text-white truncate">{media.title}</h4>
+
+                        {/* Tag Pill with copy */}
+                        <div className="mt-1 flex items-center flex-wrap gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => copyTag(`[ENVIAR_MIDIA:${media.id}]`)}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-mono text-[10px] hover:bg-emerald-500/25 transition-colors"
+                            title="Clique para copiar a tag de disparo"
+                          >
+                            <span>[ENVIAR_MIDIA:{media.id}]</span>
+                            {mediaTagCopied === `[ENVIAR_MIDIA:${media.id}]` ? (
+                              <Check className="w-2.5 h-2.5 text-emerald-300 stroke-[3]" />
+                            ) : (
+                              <Copy className="w-2.5 h-2.5" />
+                            )}
+                          </button>
+                        </div>
+
+                        {/* Trigger rule */}
+                        <p className="text-[11px] text-[#8696a0] mt-1.5 line-clamp-2">
+                          <strong className="text-emerald-300 font-normal">Gatilho:</strong>{" "}
+                          {media.triggerInstruction}
+                        </p>
+
+                        {/* Interactive View Once Checkbox on Registered Media */}
+                        <div className="mt-2.5 pt-2 border-t border-[#222e35]/80 flex items-center justify-between">
+                          <label className="inline-flex items-center gap-2 cursor-pointer select-none group/chk">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(media.viewOnce)}
+                              onChange={() => handleToggleMediaViewOnce(media.id)}
+                              className="w-3.5 h-3.5 rounded bg-[#202c33] border-[#26353d] text-emerald-500 focus:ring-0 cursor-pointer accent-emerald-500"
+                            />
+                            <span className="text-[11px] font-medium text-[#e9edef] group-hover/chk:text-white flex items-center gap-1.5">
+                              <Eye
+                                className={`w-3.5 h-3.5 transition-colors ${
+                                  media.viewOnce ? "text-emerald-400" : "text-[#8696a0]"
+                                }`}
+                              />
+                              <span>Visualização Única</span>
+                            </span>
+                          </label>
+
+                          {media.viewOnce ? (
+                            <span className="text-[10px] text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.2 rounded font-medium">
+                              Ativa (1x)
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-[#8696a0]/70">
+                              Desativada
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Delete Action */}
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteMedia(media.id)}
+                        className="absolute top-3 right-3 p-1.5 text-[#8696a0] hover:text-red-400 hover:bg-[#202c33] rounded-lg transition-colors"
+                        title="Excluir mídia"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Tab 4: Product & Payment Settings */}
         {activeTab === "product" && (
           <div className="space-y-6 animate-in fade-in duration-200">
             <div className="bg-[#111b21] border border-[#222e35] rounded-2xl p-6 shadow-xl space-y-5">
@@ -607,7 +1340,6 @@ export default function AdminPage() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Product Name */}
                 <div>
                   <label className="block text-xs font-medium text-[#8696a0] mb-1.5">
                     Nome Comercial do Produto
@@ -621,7 +1353,6 @@ export default function AdminPage() {
                   />
                 </div>
 
-                {/* Product Price */}
                 <div>
                   <label className="block text-xs font-medium text-[#8696a0] mb-1.5">
                     Preço (R$)
@@ -638,7 +1369,6 @@ export default function AdminPage() {
                   />
                 </div>
 
-                {/* Protected Delivery Link */}
                 <div className="md:col-span-2">
                   <label className="block text-xs font-medium text-[#8696a0] mb-1.5 flex items-center justify-between">
                     <span>Link Exclusivo de Entrega (Protegido)</span>
@@ -657,7 +1387,6 @@ export default function AdminPage() {
                   />
                 </div>
 
-                {/* Payment Gateway */}
                 <div>
                   <label className="block text-xs font-medium text-[#8696a0] mb-1.5">
                     Modo do Gateway de Pagamento
@@ -674,7 +1403,6 @@ export default function AdminPage() {
                   </select>
                 </div>
 
-                {/* Gateway Token */}
                 <div>
                   <label className="block text-xs font-medium text-[#8696a0] mb-1.5">
                     Token / Chave de API do Gateway
@@ -691,7 +1419,6 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {/* Webhook URL Helper */}
               <div className="pt-4 border-t border-[#222e35]">
                 <label className="block text-xs font-medium text-[#8696a0] mb-1.5">
                   URL de Notificação do Webhook (Copie para seu Gateway)
@@ -726,10 +1453,9 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Tab 4: Stats & Audit */}
+        {/* Tab 5: Stats & Audit */}
         {activeTab === "stats" && (
           <div className="space-y-6 animate-in fade-in duration-200">
-            {/* Metric Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="p-5 bg-[#111b21] border border-[#222e35] rounded-2xl shadow-md">
                 <span className="text-xs text-[#8696a0]">Total de Conversas</span>
@@ -763,7 +1489,6 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* Orders Table */}
             <div className="bg-[#111b21] border border-[#222e35] rounded-2xl p-6 shadow-xl">
               <h3 className="text-sm font-semibold text-white mb-4">
                 Últimas Transações & Pedidos PIX
@@ -838,4 +1563,3 @@ export default function AdminPage() {
     </div>
   );
 }
-

@@ -9,9 +9,19 @@ interface ChatFeedProps {
   messages: MessageData[];
   isTyping: boolean;
   onSimulatePayment?: (orderId: string) => void;
+  onOpenViewOnce?: (messageId: string, imageUrl: string) => void;
+  agentName?: string;
+  agentAvatar?: string;
 }
 
-export function ChatFeed({ messages, isTyping, onSimulatePayment }: ChatFeedProps) {
+export function ChatFeed({
+  messages,
+  isTyping,
+  onSimulatePayment,
+  onOpenViewOnce,
+  agentName,
+  agentAvatar,
+}: ChatFeedProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll on new messages or typing state change
@@ -56,11 +66,14 @@ export function ChatFeed({ messages, isTyping, onSimulatePayment }: ChatFeedProp
             key={message.id}
             message={message}
             onSimulatePayment={onSimulatePayment}
+            onOpenViewOnce={onOpenViewOnce}
+            agentName={agentName}
+            agentAvatar={agentAvatar}
           />
         ))}
 
       {/* Typing Indicator */}
-      {isTyping && <TypingIndicator />}
+      {isTyping && <TypingIndicator agentName={agentName} agentAvatar={agentAvatar} />}
 
       <div ref={bottomRef} />
     </div>

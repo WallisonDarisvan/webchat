@@ -233,12 +233,15 @@ export default function AdminPage() {
         body: JSON.stringify(payloadToSave),
       });
 
-      if (!res.ok) throw new Error("Erro ao salvar");
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => null);
+        throw new Error(errorData?.error || "Erro ao salvar");
+      }
 
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
-    } catch (err) {
-      alert("Falha ao salvar configurações.");
+    } catch (err: any) {
+      alert(`Falha ao salvar configurações: ${err?.message || "Erro desconhecido"}`);
       console.error(err);
     } finally {
       setIsSaving(false);

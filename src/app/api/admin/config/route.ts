@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, ensureDatabaseSchema } from "@/lib/prisma";
 import { getAppConfig } from "@/lib/config";
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin";
@@ -31,6 +31,7 @@ export async function PUT(req: NextRequest) {
   }
 
   try {
+    await ensureDatabaseSchema();
     const data = await req.json();
 
     const updated = await prisma.appConfig.upsert({
@@ -89,7 +90,8 @@ export async function PUT(req: NextRequest) {
     });
   } catch (error) {
     console.error("Error updating config:", error);
-    return NextResponse.json({ error: "Erro ao salvar configurações" }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Erro ao salvar configurações";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 

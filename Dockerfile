@@ -16,8 +16,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Generate Prisma Client
+# Generate Prisma Client & Sync SQLite DB
 RUN npx prisma generate
+RUN npx prisma db push --skip-generate
 
 # Build Next.js
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -37,15 +38,21 @@ ENV HOSTNAME="0.0.0.0"
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
+# Create writable prisma directory with full permissions
+RUN mkdir -p /app/prisma && chown -R nextjs:nodejs /app/prisma && chmod 777 /app/prisma
+
 # Copy public & standalone artifacts
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/prisma ./prisma
+COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
 # Copy standalone build output
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+# Ensure full permissions for SQLite read/write
+RUN chown -R nextjs:nodejs /app/prisma
 
 USER nextjs
 

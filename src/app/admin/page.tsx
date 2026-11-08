@@ -28,6 +28,7 @@ import {
   AlertCircle,
   Clock,
   Users,
+  User,
 } from "lucide-react";
 import { DEFAULT_SYSTEM_PROMPT, DEFAULT_MEDIA_INSTRUCTIONS, MediaItem } from "@/lib/config";
 import { optimizeImageForVision } from "@/lib/image-optimizer";
@@ -93,7 +94,7 @@ export default function AdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [passwordInput, setPasswordInput] = useState("");
   const [authError, setAuthError] = useState("");
-  const [activeTab, setActiveTab] = useState<"ai" | "prompt" | "product" | "stats" | "media">("ai");
+  const [activeTab, setActiveTab] = useState<"profile" | "ai" | "prompt" | "product" | "stats" | "media">("profile");
 
   // Config Form State
   const [config, setConfig] = useState<AdminConfig>({
@@ -812,6 +813,18 @@ export default function AdminPage() {
           {/* Navigation Tabs */}
         <div className="flex flex-wrap gap-2 border-b border-[#222e35] pb-4 mb-6">
           <button
+            onClick={() => setActiveTab("profile")}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all ${
+              activeTab === "profile"
+                ? "bg-emerald-600 text-white shadow-md shadow-emerald-950"
+                : "bg-[#182229] text-[#8696a0] hover:text-white hover:bg-[#202c33]"
+            }`}
+          >
+            <User className="w-4 h-4" />
+            <span>1. Perfil do Atendente</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab("ai")}
             className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all ${
               activeTab === "ai"
@@ -820,7 +833,7 @@ export default function AdminPage() {
             }`}
           >
             <Bot className="w-4 h-4" />
-            <span>1. Provedor de IA</span>
+            <span>2. Provedor de IA</span>
           </button>
 
           <button
@@ -832,7 +845,7 @@ export default function AdminPage() {
             }`}
           >
             <FileText className="w-4 h-4" />
-            <span>2. Comportamento & Prompt</span>
+            <span>3. Comportamento & Prompt</span>
           </button>
 
           <button
@@ -844,7 +857,7 @@ export default function AdminPage() {
             }`}
           >
             <ImageIcon className="w-4 h-4" />
-            <span>3. Mídias & Instruções</span>
+            <span>4. Mídias & Instruções</span>
             {mediaList.length > 0 && (
               <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-emerald-400/20 text-emerald-300 font-bold">
                 {mediaList.length}
@@ -861,7 +874,7 @@ export default function AdminPage() {
             }`}
           >
             <DollarSign className="w-4 h-4" />
-            <span>4. Produto & Pagamento</span>
+            <span>5. Produto & Pagamento</span>
           </button>
 
           <button
@@ -876,11 +889,182 @@ export default function AdminPage() {
             }`}
           >
             <BarChart3 className="w-4 h-4" />
-            <span>5. Vendas & Auditoria</span>
+            <span>6. Vendas & Auditoria</span>
           </button>
         </div>
 
-        {/* Tab 1: AI Provider Config */}
+        {/* Tab 1: Perfil do Atendente */}
+        {activeTab === "profile" && (
+          <div className="space-y-6 animate-in fade-in duration-200">
+            <div className="bg-[#111b21] border border-[#222e35] rounded-2xl p-6 shadow-xl space-y-6">
+              <div className="border-b border-[#222e35] pb-4">
+                <h2 className="text-base font-semibold text-white flex items-center gap-2">
+                  <User className="w-5 h-5 text-emerald-400" />
+                  <span>Perfil & Identidade do Atendente</span>
+                </h2>
+                <p className="text-xs text-[#8696a0] mt-1">
+                  Configure o nome, link direto de atendimento, biografia e foto de perfil deste atendente.
+                </p>
+              </div>
+
+              {/* Informações Básicas */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div>
+                  <label className="block text-xs font-semibold text-white mb-1.5">
+                    Nome do Atendente
+                  </label>
+                  <input
+                    type="text"
+                    value={config.agentName}
+                    onChange={(e) => setConfig({ ...config, agentName: e.target.value })}
+                    placeholder="Ex: Gabriel Siqueira"
+                    className="w-full px-3.5 py-2.5 bg-[#202c33] border border-[#26353d] focus:border-emerald-500 rounded-xl text-xs sm:text-sm text-white outline-none"
+                  />
+                  <p className="text-[11px] text-[#8696a0] mt-1">
+                    Nome visível para os clientes na conversa e no lobby.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-white mb-1.5">
+                    Slug da URL (Link Direto)
+                  </label>
+                  <div className="flex items-center">
+                    <span className="px-3 py-2.5 bg-[#182229] border border-r-0 border-[#26353d] rounded-l-xl text-xs text-[#8696a0] font-mono">
+                      {"/"}
+                    </span>
+                    <input
+                      type="text"
+                      value={config.slug || ""}
+                      onChange={(e) =>
+                        setConfig({
+                          ...config,
+                          slug: e.target.value
+                            .toLowerCase()
+                            .replace(/[^a-z0-9_-]/g, "-"),
+                        })
+                      }
+                      placeholder="gabriel"
+                      className="w-full px-3 py-2.5 bg-[#202c33] border border-[#26353d] focus:border-emerald-500 rounded-r-xl text-xs sm:text-sm text-white font-mono outline-none"
+                    />
+                  </div>
+                  <p className="text-[11px] text-[#8696a0] mt-1">
+                    Define a URL direta: <code className="text-emerald-400 font-mono">{`${appUrl}/${config.slug || "gabriel"}`}</code>
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-white mb-1.5">
+                    Bio / Especialidade (Exibido no Lobby Inicial)
+                  </label>
+                  <input
+                    type="text"
+                    value={config.bio || ""}
+                    onChange={(e) => setConfig({ ...config, bio: e.target.value })}
+                    placeholder="Ex: Especialista em Vendas e Suporte VIP"
+                    className="w-full px-3.5 py-2.5 bg-[#202c33] border border-[#26353d] focus:border-emerald-500 rounded-xl text-xs sm:text-sm text-white outline-none"
+                  />
+                  <p className="text-[11px] text-[#8696a0] mt-1">
+                    Breve descrição ou cargo que aparece no cartão do atendente.
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-between sm:justify-start gap-4 pt-2">
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={config.isActive !== false}
+                      onChange={(e) => setConfig({ ...config, isActive: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-10 h-5 bg-[#202c33] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                  </label>
+                  <div>
+                    <span className="text-xs font-semibold text-white block">
+                      Exibir na Página Inicial (Lobby)
+                    </span>
+                    <span className="text-[11px] text-[#8696a0]">
+                      Se desativado, o atendente só pode ser acessado pelo link direto.
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Upload Foto da Atendente */}
+              <div className="pt-5 border-t border-[#222e35] flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#182229] p-4 rounded-xl border border-[#26353d]">
+                <div className="flex items-center gap-3.5">
+                  <div className="relative w-14 h-14 rounded-full overflow-hidden bg-[#202c33] border-2 border-emerald-500/40 flex items-center justify-center shrink-0 shadow-md">
+                    {config.agentAvatar ? (
+                      <img
+                        src={config.agentAvatar}
+                        alt="Foto da Atendente"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-base font-bold text-emerald-400">
+                        {config.agentName
+                          ? config.agentName
+                              .trim()
+                              .split(/\s+/)
+                              .slice(0, 2)
+                              .map((s) => s[0])
+                              .join("")
+                              .toUpperCase()
+                          : "AT"}
+                      </span>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-white">
+                      Foto da Atendente (Avatar de Perfil)
+                    </label>
+                    <p className="text-[11px] text-[#8696a0] mt-0.5">
+                      Essa foto aparecerá no cabeçalho, nas mensagens e no indicador de digitação do chat.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={avatarFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleUploadAvatar}
+                    className="hidden"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => avatarFileInputRef.current?.click()}
+                    disabled={isUploadingAvatar}
+                    className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-medium transition-colors disabled:opacity-50 shadow-md shadow-emerald-950"
+                  >
+                    {isUploadingAvatar ? (
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Upload className="w-3.5 h-3.5" />
+                    )}
+                    <span>{config.agentAvatar ? "Trocar Foto" : "Fazer Upload da Foto"}</span>
+                  </button>
+
+                  {config.agentAvatar && (
+                    <button
+                      type="button"
+                      onClick={() => setConfig({ ...config, agentAvatar: "" })}
+                      className="p-2.5 text-[#8696a0] hover:text-red-400 hover:bg-[#202c33] rounded-xl transition-colors text-xs"
+                      title="Remover foto (usar iniciais)"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 2: AI Provider Config */}
         {activeTab === "ai" && (
           <div className="space-y-6 animate-in fade-in duration-200">
             <div className="bg-[#111b21] border border-[#222e35] rounded-2xl p-6 shadow-xl space-y-5">
@@ -1003,7 +1187,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Tab 2: System Prompt & Sales Behavior */}
+        {/* Tab 3: System Prompt & Sales Behavior */}
         {activeTab === "prompt" && (
           <div className="space-y-6 animate-in fade-in duration-200">
             <div className="bg-[#111b21] border border-[#222e35] rounded-2xl p-6 shadow-xl space-y-4">
@@ -1039,211 +1223,6 @@ export default function AdminPage() {
                     [GERAR_PAGAMENTO]
                   </code>
                   . O backend captura essa tag, remove do texto visível e monta o card com QR Code PIX imediatamente.
-                </p>
-              </div>
-
-              {/* Agent Profile & Identity */}
-              <div className="p-4 bg-[#182229] border border-[#222e35] rounded-xl space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-white mb-1">
-                      Nome do Atendente
-                    </label>
-                    <input
-                      type="text"
-                      value={config.agentName}
-                      onChange={(e) => setConfig({ ...config, agentName: e.target.value })}
-                      placeholder="Ex: Gabriel Siqueira"
-                      className="w-full px-3.5 py-2.5 bg-[#202c33] border border-[#26353d] focus:border-emerald-500 rounded-xl text-xs sm:text-sm text-white outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-white mb-1">
-                      Slug da URL (Link Direto)
-                    </label>
-                    <div className="flex items-center">
-                      <span className="px-3 py-2.5 bg-[#182229] border border-r-0 border-[#26353d] rounded-l-xl text-xs text-[#8696a0] font-mono">
-                        {"/"}
-                      </span>
-                      <input
-                        type="text"
-                        value={config.slug || ""}
-                        onChange={(e) =>
-                          setConfig({
-                            ...config,
-                            slug: e.target.value
-                              .toLowerCase()
-                              .replace(/[^a-z0-9_-]/g, "-"),
-                          })
-                        }
-                        placeholder="gabriel"
-                        className="w-full px-3 py-2.5 bg-[#202c33] border border-[#26353d] focus:border-emerald-500 rounded-r-xl text-xs sm:text-sm text-white font-mono outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-white mb-1">
-                      Bio / Especialidade (Exibido no Lobby Inicial)
-                    </label>
-                    <input
-                      type="text"
-                      value={config.bio || ""}
-                      onChange={(e) => setConfig({ ...config, bio: e.target.value })}
-                      placeholder="Ex: Especialista em Vendas e Suporte VIP"
-                      className="w-full px-3.5 py-2.5 bg-[#202c33] border border-[#26353d] focus:border-emerald-500 rounded-xl text-xs sm:text-sm text-white outline-none"
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between sm:justify-start gap-4 pt-4 sm:pt-6">
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={config.isActive !== false}
-                        onChange={(e) => setConfig({ ...config, isActive: e.target.checked })}
-                        className="sr-only peer"
-                      />
-                      <div className="w-10 h-5 bg-[#202c33] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
-                    </label>
-                    <div>
-                      <span className="text-xs font-semibold text-white block">
-                        Exibir na Página Inicial (Lobby)
-                      </span>
-                      <span className="text-[11px] text-[#8696a0]">
-                        Se desativado, o atendente só pode ser acessado pelo link direto.
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-[#222e35]/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <span className="text-xs text-[#8696a0]">Variáveis Dinâmicas do Prompt:</span>
-                  <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const textarea = document.getElementById("systemPromptTextarea") as HTMLTextAreaElement;
-                          if (textarea) {
-                            const start = textarea.selectionStart || 0;
-                            const end = textarea.selectionEnd || 0;
-                            const text = config.systemPrompt;
-                            const updated = text.substring(0, start) + "[NOME]" + text.substring(end);
-                            setConfig({ ...config, systemPrompt: updated });
-                            setTimeout(() => {
-                              textarea.focus();
-                              textarea.setSelectionRange(start + 6, start + 6);
-                            }, 50);
-                          } else {
-                            setConfig({ ...config, systemPrompt: config.systemPrompt + " [NOME]" });
-                          }
-                        }}
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-mono text-xs hover:bg-emerald-500/25 transition-colors cursor-pointer"
-                        title="Clique para inserir [NOME] no prompt"
-                      >
-                        <span>+ Inserir [NOME]</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const textarea = document.getElementById("systemPromptTextarea") as HTMLTextAreaElement;
-                          if (textarea) {
-                            const start = textarea.selectionStart || 0;
-                            const end = textarea.selectionEnd || 0;
-                            const text = config.systemPrompt;
-                            const updated = text.substring(0, start) + "[TEMPO]" + text.substring(end);
-                            setConfig({ ...config, systemPrompt: updated });
-                            setTimeout(() => {
-                              textarea.focus();
-                              textarea.setSelectionRange(start + 7, start + 7);
-                            }, 50);
-                          } else {
-                            setConfig({ ...config, systemPrompt: config.systemPrompt + " [TEMPO]" });
-                          }
-                        }}
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-teal-500/15 border border-teal-500/30 text-teal-400 font-mono text-xs hover:bg-teal-500/25 transition-colors cursor-pointer"
-                        title="Clique para inserir [TEMPO] no prompt"
-                      >
-                        <span>+ Inserir [TEMPO]</span>
-                      </button>
-                    </div>
-                  </div>
-
-                {/* Upload Foto da Atendente */}
-                <div className="pt-3 border-t border-[#222e35] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-3.5">
-                    {/* Avatar Preview */}
-                    <div className="relative w-12 h-12 rounded-full overflow-hidden bg-[#202c33] border-2 border-emerald-500/40 flex items-center justify-center shrink-0 shadow-md">
-                      {config.agentAvatar ? (
-                        <img
-                          src={config.agentAvatar}
-                          alt="Foto da Atendente"
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <span className="text-sm font-bold text-emerald-400">
-                          {config.agentName
-                            ? config.agentName
-                                .trim()
-                                .split(/\s+/)
-                                .slice(0, 2)
-                                .map((s) => s[0])
-                                .join("")
-                                .toUpperCase()
-                            : "AT"}
-                        </span>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-white">
-                        Foto da Atendente (Avatar de Perfil)
-                      </label>
-                      <p className="text-[11px] text-[#8696a0] mt-0.5">
-                        Essa foto aparecerá no cabeçalho, nas mensagens e no indicador de digitação do chat.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <input
-                      ref={avatarFileInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleUploadAvatar}
-                      className="hidden"
-                    />
-
-                    <button
-                      type="button"
-                      onClick={() => avatarFileInputRef.current?.click()}
-                      disabled={isUploadingAvatar}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-medium transition-colors disabled:opacity-50 shadow-md shadow-emerald-950"
-                    >
-                      {isUploadingAvatar ? (
-                        <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      ) : (
-                        <Upload className="w-3.5 h-3.5" />
-                      )}
-                      <span>{config.agentAvatar ? "Trocar Foto" : "Fazer Upload da Foto"}</span>
-                    </button>
-
-                    {config.agentAvatar && (
-                      <button
-                        type="button"
-                        onClick={() => setConfig({ ...config, agentAvatar: "" })}
-                        className="p-2 text-[#8696a0] hover:text-red-400 hover:bg-[#202c33] rounded-xl transition-colors text-xs"
-                        title="Remover foto (usar iniciais)"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                <p className="text-[11px] text-[#8696a0]">
-                  As tags <code className="bg-[#202c33] text-emerald-300 px-1 py-0.5 rounded font-mono">[NOME]</code> e <code className="bg-[#202c33] text-teal-300 px-1 py-0.5 rounded font-mono">[TEMPO]</code> serão substituídas automaticamente pelo nome do atendente e pelo tempo de conversa configurados.
                 </p>
               </div>
 
@@ -1351,9 +1330,67 @@ export default function AdminPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-[#8696a0] mb-1.5">
-                  Prompt de Sistema Completo
-                </label>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+                  <div>
+                    <label className="block text-xs font-semibold text-white">
+                      Prompt de Sistema Completo
+                    </label>
+                    <p className="text-[11px] text-[#8696a0]">
+                      As tags <code className="bg-[#202c33] text-emerald-300 px-1 py-0.5 rounded font-mono">[NOME]</code> e <code className="bg-[#202c33] text-teal-300 px-1 py-0.5 rounded font-mono">[TEMPO]</code> são substituídas automaticamente em tempo real.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const textarea = document.getElementById("systemPromptTextarea") as HTMLTextAreaElement;
+                        if (textarea) {
+                          const start = textarea.selectionStart || 0;
+                          const end = textarea.selectionEnd || 0;
+                          const text = config.systemPrompt;
+                          const updated = text.substring(0, start) + "[NOME]" + text.substring(end);
+                          setConfig({ ...config, systemPrompt: updated });
+                          setTimeout(() => {
+                            textarea.focus();
+                            textarea.setSelectionRange(start + 6, start + 6);
+                          }, 50);
+                        } else {
+                          setConfig({ ...config, systemPrompt: config.systemPrompt + " [NOME]" });
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-mono text-xs hover:bg-emerald-500/25 transition-colors cursor-pointer"
+                      title="Clique para inserir [NOME] no prompt"
+                    >
+                      <span>+ Inserir [NOME]</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const textarea = document.getElementById("systemPromptTextarea") as HTMLTextAreaElement;
+                        if (textarea) {
+                          const start = textarea.selectionStart || 0;
+                          const end = textarea.selectionEnd || 0;
+                          const text = config.systemPrompt;
+                          const updated = text.substring(0, start) + "[TEMPO]" + text.substring(end);
+                          setConfig({ ...config, systemPrompt: updated });
+                          setTimeout(() => {
+                            textarea.focus();
+                            textarea.setSelectionRange(start + 7, start + 7);
+                          }, 50);
+                        } else {
+                          setConfig({ ...config, systemPrompt: config.systemPrompt + " [TEMPO]" });
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-teal-500/15 border border-teal-500/30 text-teal-400 font-mono text-xs hover:bg-teal-500/25 transition-colors cursor-pointer"
+                      title="Clique para inserir [TEMPO] no prompt"
+                    >
+                      <span>+ Inserir [TEMPO]</span>
+                    </button>
+                  </div>
+                </div>
+
                 <textarea
                   id="systemPromptTextarea"
                   rows={16}
@@ -1366,7 +1403,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Tab 3: Mídias & Instruções de Uso na IA (NOVA ABA) */}
+        {/* Tab 4: Mídias & Instruções de Uso na IA */}
         {activeTab === "media" && (
           <div className="space-y-6 animate-in fade-in duration-200">
             {/* General Media Instructions Card */}
@@ -1679,7 +1716,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Tab 4: Product & Payment Settings */}
+        {/* Tab 5: Product & Payment Settings */}
         {activeTab === "product" && (
           <div className="space-y-6 animate-in fade-in duration-200">
             <div className="bg-[#111b21] border border-[#222e35] rounded-2xl p-6 shadow-xl space-y-5">
@@ -1807,7 +1844,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Tab 5: Stats & Audit */}
+        {/* Tab 6: Stats & Audit */}
         {activeTab === "stats" && (
           <div className="space-y-6 animate-in fade-in duration-200">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

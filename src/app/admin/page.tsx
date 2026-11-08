@@ -632,10 +632,10 @@ export default function AdminPage() {
         </div>
       </header>
 
-      {/* 2-Column Dashboard: Left Sidebar + Right Workspace */}
-      <div className="flex-1 flex flex-col md:flex-row w-full max-w-[1600px] mx-auto min-h-0">
+      {/* 2-Column Dashboard: Full-bleed Left Sidebar + Right Workspace */}
+      <div className="flex-1 flex flex-col md:flex-row w-full min-h-0">
         {/* Left Sidebar: Attendants */}
-        <aside className="w-full md:w-72 lg:w-80 bg-[#111b21] border-b md:border-b-0 md:border-r border-[#222e35] flex flex-col shrink-0">
+        <aside className="w-full md:w-64 lg:w-72 bg-[#111b21] border-b md:border-b-0 md:border-r border-[#222e35] flex flex-col shrink-0">
           {/* Sidebar Header */}
           <div className="p-4 border-b border-[#222e35] flex items-center justify-between bg-[#111b21]">
             <div className="flex items-center gap-2">
@@ -798,23 +798,14 @@ export default function AdminPage() {
             </div>
 
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => handleSaveConfig()}
-                disabled={isSaving}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold transition-all shadow-md shadow-emerald-950 disabled:opacity-50"
-              >
-                {saveSuccess ? (
-                  <>
-                    <Check className="w-3.5 h-3.5 stroke-[3]" />
-                    <span>Salvo com Sucesso!</span>
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-3.5 h-3.5" />
-                    <span>{isSaving ? "Salvando..." : "Salvar Alterações"}</span>
-                  </>
-                )}
-              </button>
+              <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border ${
+                config.isActive !== false
+                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                  : "bg-neutral-500/10 text-neutral-400 border-neutral-500/20"
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${config.isActive !== false ? "bg-emerald-400 animate-pulse" : "bg-neutral-400"}`} />
+                <span>{config.isActive !== false ? "Visível na Página Inicial" : "Oculto da Página Inicial"}</span>
+              </span>
             </div>
           </div>
 

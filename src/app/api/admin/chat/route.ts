@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   try {
     await ensureDatabaseSchema();
     const body = await req.json();
-    const { messages, attendantId } = body;
+    const { messages, attendantId, systemPrompt, smartRouting, visionModel, textModel } = body;
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json({ error: "Nenhuma mensagem enviada" }, { status: 400 });
@@ -49,8 +49,9 @@ export async function POST(req: NextRequest) {
     }
 
     const endpoint = (cfg.aiBaseUrl || "https://api.deepseek.com").replace(/\/+$/, "") + "/chat/completions";
+    const isOpenRouter = endpoint.includes("openrouter.ai");
 
-    const systemInstruction = `Você é um assistente de inteligência artificial avançado, versátil e altamente capaz (estilo ChatGPT), com raciocínio lógico apurado e visão computacional para análise detalhada de imagens.
+    const defaultSystemInstruction = `Você é um assistente de inteligência artificial avançado, versátil e altamente capaz (estilo ChatGPT), com raciocínio lógico apurado e visão computacional para análise detalhada de imagens.
 O usuário com quem você está conversando é o criador e administrador do sistema.
 Seu objetivo é ajudá-lo diretamente com qualquer solicitação, pergunta ou tarefa que ele enviar:
 - Analisar imagens, fotos, prints de tela, layouts ou documentos enviados;
@@ -61,11 +62,83 @@ Seu objetivo é ajudá-lo diretamente com qualquer solicitação, pergunta ou ta
 Importante: Converse diretamente com o usuário como um assistente de IA neutro e prestativo. NÃO incorpore a persona de atendente e NÃO aplique regras de comportamento de vendas ao usuário.
 Responda sempre em português do Brasil com formatação limpa e agradável em Markdown.`;
 
+    const effectiveSystemInstruction =
+      typeof systemPrompt === "string" && systemPrompt.trim().length > 0
+        ? systemPrompt.trim()
+        : defaultSystemInstruction;
+
+    const isSmartMode = smartRouting !== false;
+    const effectiveTextModel = (typeof textModel === "string" && textModel.trim()) || "deepseek/deepseek-chat";
+    const effectiveVisionModel = (typeof visionModel === "string" && visionModel.trim()) || "deepseek/deepseek-v4.1-flash";
+
+    // Se estiver em modo inteligente dual e a última mensagem do usuário tiver imagem, a IA de visão lê e transcreve
+    const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user");
+    const imageDescriptionsMap: Record<string, string> = {};
+
+    if (isSmartMode && lastUserMsg?.imageUrl) {
+      try {
+        const visionPayload = {
+          model: effectiveVisionModel,
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "Descreva de forma concisa e direta os elementos visuais visíveis nesta imagem (pessoas, poses, roupas, cores, textos visíveis e ambiente). Seja estritamente objetivo, descritivo e factual.",
+                },
+                {
+                  type: "image_url",
+                  image_url: { url: lastUserMsg.imageUrl },
+                },
+              ],
+            },
+          ],
+          max_tokens: 350,
+          provider: isOpenRouter
+            ? {
+                order: ["DeepInfra", "Novita"],
+                allow_fallbacks: true,
+                data_collection: "deny",
+              }
+            : undefined,
+        };
+
+        const vRes = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${cfg.aiApiKey}`,
+          },
+          body: JSON.stringify(visionPayload),
+        });
+
+        if (vRes.ok) {
+          const vData = await vRes.json();
+          const desc = vData.choices?.[0]?.message?.content || vData.choices?.[0]?.message?.reasoning || "";
+          if (desc) {
+            imageDescriptionsMap[lastUserMsg.imageUrl] = desc;
+          }
+        }
+      } catch (vErr) {
+        console.warn("Smart vision transcription warning:", vErr);
+      }
+    }
+
     const apiMessages = [
-      { role: "system", content: systemInstruction },
+      { role: "system", content: effectiveSystemInstruction },
       ...messages.slice(-12).map((m: any) => {
         const role = m.role === "assistant" ? "assistant" : "user";
         if (role === "user" && m.imageUrl) {
+          if (isSmartMode) {
+            const desc = imageDescriptionsMap[m.imageUrl] || "Imagem anexada pelo usuário.";
+            const userText = m.content && m.content.trim() ? m.content.trim() : "Analise a imagem anexada.";
+            return {
+              role: "user",
+              content: `[O usuário anexou uma imagem ao chat. Descrição visual detalhada da imagem:\n"${desc}"]\n\nSolicitação do usuário: ${userText}`,
+            };
+          }
+
           return {
             role: "user",
             content: [
@@ -91,10 +164,12 @@ Responda sempre em português do Brasil com formatação limpa e agradável em M
     ];
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 20000);
+    const timeout = setTimeout(() => controller.abort(), 25000);
 
-    const requestPayload = {
-      model: cfg.aiModel || "deepseek-chat",
+    const modelToUse = isSmartMode ? effectiveTextModel : (cfg.aiModel || "deepseek-chat");
+
+    const requestPayload: Record<string, any> = {
+      model: modelToUse,
       messages: apiMessages,
       temperature: cfg.aiTemperature ?? 0.7,
       max_tokens: 1500,
@@ -104,6 +179,14 @@ Responda sempre em português do Brasil com formatação limpa e agradável em M
         max_tokens: 0,
       },
     };
+
+    if (isOpenRouter) {
+      requestPayload.provider = {
+        order: ["DeepInfra", "Novita"],
+        allow_fallbacks: true,
+        data_collection: "deny",
+      };
+    }
 
     const response = await fetch(endpoint, {
       method: "POST",

@@ -111,7 +111,7 @@ ${mediaCatalogItems
         processedPrompt = processedPrompt.replace(regex, tag.value);
       }
     }
-  } catch {}
+  } catch { }
 
   let directiveSection = "";
   if (params.systemDirective) {
@@ -130,9 +130,8 @@ Informações do atendente, visitante e contexto atual:
 - Seu Nome (Atendente): ${effectiveAgentName}
 - Nome do visitante: ${params.userName || "Cliente"}
 - Nome do Produto: ${config.productName}
-- Preço do Produto: R$ ${config.productPrice.toFixed(2)}${
-  params.clientStatus ? `\n- Status do Cliente: ${params.clientStatus}` : ""
-}
+- Preço do Produto: R$ ${config.productPrice.toFixed(2)}${params.clientStatus ? `\n- Status do Cliente: ${params.clientStatus}` : ""
+    }
 - Lembre-se: quando o cliente concordar em comprar ou pedir para pagar, inclua no final do seu texto a tag [GERAR_PAGAMENTO]. NUNCA invente links de download falsos.
 - Se o cliente enviar imagens ou fotos (comprovantes, prints, fotos de produtos ou dúvidas), analise com atenção os elementos visuais e responda de forma natural e precisa.${mediaSection}${directiveSection}${statusSection}`;
 
@@ -197,6 +196,27 @@ Informações do atendente, visitante e contexto atual:
 
   try {
     const endpoint = config.aiBaseUrl.replace(/\/+$/, "") + "/chat/completions";
+    const isOpenRouter = endpoint.includes("openrouter.ai");
+
+    const requestPayload: Record<string, any> = {
+      model: config.aiModel || "deepseek-chat",
+      messages: apiMessages,
+      temperature: config.aiTemperature ?? 0.75,
+      max_tokens: 600,
+      enable_thinking: false,
+      reasoning: {
+        enabled: false,
+        max_tokens: 0,
+      },
+    };
+
+    if (isOpenRouter) {
+      requestPayload.provider = {
+        order: ["DeepInfra", "Novita"],
+        allow_fallbacks: true,
+        data_collection: "deny",
+      };
+    }
 
     const response = await fetch(endpoint, {
       method: "POST",
@@ -204,17 +224,7 @@ Informações do atendente, visitante e contexto atual:
         "Content-Type": "application/json",
         Authorization: `Bearer ${config.aiApiKey}`,
       },
-      body: JSON.stringify({
-        model: config.aiModel || "deepseek-chat",
-        messages: apiMessages,
-        temperature: config.aiTemperature ?? 0.75,
-        max_tokens: 600,
-        enable_thinking: false,
-        reasoning: {
-          enabled: false,
-          max_tokens: 0,
-        },
-      }),
+      body: JSON.stringify(requestPayload),
       signal: controller.signal,
     });
 

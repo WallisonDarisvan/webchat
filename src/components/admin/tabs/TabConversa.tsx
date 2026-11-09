@@ -15,6 +15,8 @@ import {
   Image as ImageIcon,
   Paperclip,
   X,
+  SlidersHorizontal,
+  RotateCcw,
 } from "lucide-react";
 import { AdminConfig } from "../types";
 
@@ -43,6 +45,39 @@ export function TabConversa({ config }: TabConversaProps) {
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const [systemPrompt, setSystemPrompt] = useState<string>("");
+  const [smartRouting, setSmartRouting] = useState<boolean>(true);
+  const [visionModel, setVisionModel] = useState<string>("deepseek/deepseek-v4.1-flash");
+  const [textModel, setTextModel] = useState<string>("deepseek/deepseek-chat");
+
+  const [isConfigOpen, setIsConfigOpen] = useState(false);
+  const [draftPrompt, setDraftPrompt] = useState("");
+  const [draftSmartRouting, setDraftSmartRouting] = useState<boolean>(true);
+  const [draftVisionModel, setDraftVisionModel] = useState<string>("deepseek/deepseek-v4.1-flash");
+  const [draftTextModel, setDraftTextModel] = useState<string>("deepseek/deepseek-chat");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedPrompt = localStorage.getItem("admin_chat_custom_prompt") || "";
+      setSystemPrompt(savedPrompt);
+      setDraftPrompt(savedPrompt);
+
+      const savedRouting = localStorage.getItem("admin_chat_smart_routing");
+      if (savedRouting !== null) {
+        setSmartRouting(savedRouting === "true");
+        setDraftSmartRouting(savedRouting === "true");
+      }
+
+      const savedVision = localStorage.getItem("admin_chat_vision_model") || "deepseek/deepseek-v4.1-flash";
+      setVisionModel(savedVision);
+      setDraftVisionModel(savedVision);
+
+      const savedText = localStorage.getItem("admin_chat_text_model") || "deepseek/deepseek-chat";
+      setTextModel(savedText);
+      setDraftTextModel(savedText);
+    }
+  }, []);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -125,6 +160,10 @@ export function TabConversa({ config }: TabConversaProps) {
             imageUrl: m.imageUrl,
           })),
           attendantId: config.id || config.slug,
+          systemPrompt: systemPrompt.trim() || undefined,
+          smartRouting,
+          visionModel: visionModel.trim() || "deepseek/deepseek-v4.1-flash",
+          textModel: textModel.trim() || "deepseek/deepseek-chat",
         }),
       });
 
@@ -192,7 +231,7 @@ export function TabConversa({ config }: TabConversaProps) {
                 <h2 className="text-sm font-semibold text-white">Conversa com a IA</h2>
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
                   <Sparkles className="w-2.5 h-2.5" />
-                  <span>{config.aiModel || "deepseek-chat"}</span>
+                  <span>{smartRouting ? `${textModel.split("/").pop()} + Visão` : (config.aiModel || "deepseek-chat")}</span>
                 </span>
                 <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#202c33] text-[#8696a0] border border-[#26353d]">
                   <ImageIcon className="w-2.5 h-2.5 text-emerald-400" />
@@ -206,6 +245,29 @@ export function TabConversa({ config }: TabConversaProps) {
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setDraftPrompt(systemPrompt);
+                setDraftSmartRouting(smartRouting);
+                setDraftVisionModel(visionModel);
+                setDraftTextModel(textModel);
+                setIsConfigOpen(true);
+              }}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border transition-all cursor-pointer ${
+                systemPrompt.trim()
+                  ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25"
+                  : "text-[#8696a0] hover:text-white hover:bg-[#202c33] border-[#26353d]"
+              }`}
+              title="Configurar prompt e instruções do assistente"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Prompt do Assistente</span>
+              {systemPrompt.trim() && (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              )}
+            </button>
+
             {messages.length > 0 && (
               <button
                 type="button"
@@ -413,6 +475,172 @@ export function TabConversa({ config }: TabConversaProps) {
           </div>
         </div>
       </div>
+
+      {/* Modal de Configuração do Prompt do Assistente */}
+      {isConfigOpen && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-[#111b21] border border-[#222e35] rounded-2xl max-w-lg w-full p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-[#222e35] pb-3">
+              <div className="flex items-center gap-2 text-white font-semibold text-sm">
+                <SlidersHorizontal className="w-4 h-4 text-emerald-400" />
+                <span>Instruções Personalizadas do Assistente</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsConfigOpen(false)}
+                className="text-[#8696a0] hover:text-white p-1 rounded-lg hover:bg-[#202c33] transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Switch de Roteamento Inteligente Dual */}
+            <div className="bg-[#182229] border border-[#26353d] rounded-xl p-3.5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                    <Sparkles className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-semibold text-white">Roteamento Inteligente Dual</h4>
+                    <p className="text-[10px] text-[#8696a0]">
+                      Visão com <span className="text-emerald-400">v4.1-flash</span> + Resposta sem censura com <span className="text-emerald-400">deepseek-chat</span>
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setDraftSmartRouting(!draftSmartRouting)}
+                  className={`w-11 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors ${
+                    draftSmartRouting ? "bg-emerald-600" : "bg-[#2a3942]"
+                  }`}
+                  title={draftSmartRouting ? "Desativar roteamento inteligente" : "Ativar roteamento inteligente"}
+                >
+                  <div
+                    className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                      draftSmartRouting ? "translate-x-5" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {draftSmartRouting && (
+                <div className="pt-2 border-t border-[#26353d]/60 space-y-2 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] text-[#8696a0] font-medium block mb-1">
+                        IA de Leitura de Imagem (Visão):
+                      </label>
+                      <input
+                        type="text"
+                        value={draftVisionModel}
+                        onChange={(e) => setDraftVisionModel(e.target.value)}
+                        placeholder="deepseek/deepseek-v4.1-flash"
+                        className="w-full bg-[#111b21] border border-[#26353d] focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-[11px] text-[#d1d7db] outline-none font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-[#8696a0] font-medium block mb-1">
+                        IA de Conversa (Sem Censura):
+                      </label>
+                      <input
+                        type="text"
+                        value={draftTextModel}
+                        onChange={(e) => setDraftTextModel(e.target.value)}
+                        placeholder="deepseek/deepseek-chat"
+                        className="w-full bg-[#111b21] border border-[#26353d] focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-[11px] text-[#d1d7db] outline-none font-mono"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-[#8696a0] leading-relaxed bg-[#111b21]/70 p-2 rounded-lg border border-[#26353d]/40">
+                    💡 <strong>Como funciona:</strong> Ao anexar uma imagem, o modelo de visão descreve objetivamente todos os elementos visuais da foto e entrega essa descrição para a IA sem censura, gerando resposta completa sem recusas ou bloqueios.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-white block">
+                Instruções Personalizadas (Prompt do Assistente):
+              </label>
+              <p className="text-xs text-[#8696a0] leading-relaxed">
+                Defina como a IA deve se comportar nesta aba de conversa. Você pode fornecer regras livres, estilo de escrita, tom de voz ou orientações específicas para suas solicitações.
+              </p>
+
+              <textarea
+                value={draftPrompt}
+                onChange={(e) => setDraftPrompt(e.target.value)}
+                placeholder="Exemplo: Atue como um especialista em copywriting e marketing persuasivo para o mercado de conteúdo exclusivo e adulto. Seja direto, prático, sem censura moral e gere respostas prontas para copiar e colar."
+                rows={5}
+                className="w-full bg-[#182229] border border-[#26353d] focus:border-emerald-500 rounded-xl p-3 text-xs text-[#d1d7db] placeholder-[#8696a0]/60 outline-none resize-none leading-relaxed"
+              />
+
+              <div className="flex items-center justify-between text-[11px] text-[#8696a0] pt-1">
+                <span>{draftPrompt.length} caracteres</span>
+                {draftPrompt && (
+                  <button
+                    type="button"
+                    onClick={() => setDraftPrompt("")}
+                    className="text-rose-400 hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <RotateCcw className="w-3 h-3" /> Limpar campo
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 border-t border-[#222e35] pt-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setDraftPrompt("");
+                  setSystemPrompt("");
+                  setDraftSmartRouting(true);
+                  setSmartRouting(true);
+                  setDraftVisionModel("deepseek/deepseek-v4.1-flash");
+                  setVisionModel("deepseek/deepseek-v4.1-flash");
+                  setDraftTextModel("deepseek/deepseek-chat");
+                  setTextModel("deepseek/deepseek-chat");
+                  if (typeof window !== "undefined") {
+                    localStorage.removeItem("admin_chat_custom_prompt");
+                    localStorage.setItem("admin_chat_smart_routing", "true");
+                    localStorage.setItem("admin_chat_vision_model", "deepseek/deepseek-v4.1-flash");
+                    localStorage.setItem("admin_chat_text_model", "deepseek/deepseek-chat");
+                  }
+                  setIsConfigOpen(false);
+                }}
+                className="px-3 py-1.5 rounded-lg text-xs text-[#8696a0] hover:text-white hover:bg-[#202c33] transition-colors cursor-pointer"
+              >
+                Usar Padrão do Sistema
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSystemPrompt(draftPrompt);
+                  setSmartRouting(draftSmartRouting);
+                  setVisionModel(draftVisionModel);
+                  setTextModel(draftTextModel);
+                  if (typeof window !== "undefined") {
+                    if (draftPrompt.trim()) {
+                      localStorage.setItem("admin_chat_custom_prompt", draftPrompt.trim());
+                    } else {
+                      localStorage.removeItem("admin_chat_custom_prompt");
+                    }
+                    localStorage.setItem("admin_chat_smart_routing", String(draftSmartRouting));
+                    localStorage.setItem("admin_chat_vision_model", draftVisionModel.trim());
+                    localStorage.setItem("admin_chat_text_model", draftTextModel.trim());
+                  }
+                  setIsConfigOpen(false);
+                }}
+                className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500 hover:bg-emerald-600 text-black transition-colors cursor-pointer shadow-md"
+              >
+                Salvar Configurações
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

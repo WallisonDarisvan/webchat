@@ -31,10 +31,10 @@ interface TabConversaProps {
 }
 
 const QUICK_PROMPTS = [
-  "Sugira uma mensagem persuasiva para quebrar objeção de valor",
-  "Como posso melhorar as regras anti-robô e humanização da atendente?",
-  "Crie um roteiro de mensagens pós-venda carinhoso e descontraído",
-  "Simule um cliente com dúvida sobre pagamento e me responda como a atendente",
+  "Crie um roteiro persuasivo de mensagens para vendas",
+  "Dê 5 ideias de ganchos chamativos para capturar atenção",
+  "Como posso melhorar a conversão do meu produto?",
+  "Escreva uma mensagem calorosa e profissional para clientes",
 ];
 
 export function TabConversa({ config }: TabConversaProps) {
@@ -200,7 +200,7 @@ export function TabConversa({ config }: TabConversaProps) {
                 </span>
               </div>
               <p className="text-[11px] text-[#8696a0]">
-                Peça ideias, anexe fotos ou faça testes com a IA usando o contexto de {config.agentName}
+                Converse livremente com o seu assistente de IA, peça ideias, gere conteúdos ou anexe imagens
               </p>
             </div>
           </div>

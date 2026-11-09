@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useRef, useMemo, useEffect } from "react";
-import { FileText, RefreshCw, Zap, Clock, Tag, Eye, EyeOff, Sparkles, CheckCircle2 } from "lucide-react";
+import React, { useState, useRef, useEffect } from "react";
+import { FileText, RefreshCw, Clock, Tag, Eye, EyeOff } from "lucide-react";
 import { AdminConfig, AdminTabType } from "../types";
 import { PromptTag, DEFAULT_SYSTEM_PROMPT } from "@/lib/config";
 
@@ -58,19 +58,12 @@ export function TabPrompt({
     }
   };
 
-  // Find all distinct tags present in the current prompt text
-  const detectedTags = useMemo(() => {
-    const matches = config.systemPrompt.match(/\[[A-Za-z0-9_\-:]+(?:\s+[A-Za-z0-9_\-:]+)*\]/g) || [];
-    return Array.from(new Set(matches));
-  }, [config.systemPrompt]);
-
   // Helper to categorize tag and get appropriate badge theme
   const getTagStyle = (tag: string) => {
     const upper = tag.toUpperCase();
     if (upper.includes("STATUS_CLIENTE") || upper.includes("STATUS")) {
       return {
         badgeClasses: "bg-purple-500/25 text-purple-300 ring-1 ring-purple-500/50 shadow-[0_0_8px_rgba(168,85,247,0.25)]",
-        pillClasses: "bg-purple-500/15 border-purple-500/30 text-purple-300",
         type: "Status",
       };
     }
@@ -82,7 +75,6 @@ export function TabPrompt({
     ) {
       return {
         badgeClasses: "bg-cyan-500/25 text-cyan-300 ring-1 ring-cyan-500/50 shadow-[0_0_8px_rgba(6,182,212,0.25)]",
-        pillClasses: "bg-cyan-500/15 border-cyan-500/30 text-cyan-300",
         type: "Timer",
       };
     }
@@ -95,13 +87,11 @@ export function TabPrompt({
     ) {
       return {
         badgeClasses: "bg-amber-500/25 text-amber-300 ring-1 ring-amber-500/50 shadow-[0_0_8px_rgba(245,158,11,0.25)]",
-        pillClasses: "bg-amber-500/15 border-amber-500/30 text-amber-300",
         type: "Ação",
       };
     }
     return {
       badgeClasses: "bg-emerald-500/25 text-emerald-300 ring-1 ring-emerald-500/50 shadow-[0_0_8px_rgba(16,185,129,0.25)]",
-      pillClasses: "bg-emerald-500/15 border-emerald-500/30 text-emerald-300",
       type: "Variável",
     };
   };
@@ -157,34 +147,12 @@ export function TabPrompt({
           </button>
         </div>
 
-        <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs text-emerald-300 space-y-1">
-          <p className="font-semibold flex items-center gap-1.5">
-            <Zap className="w-4 h-4 text-emerald-400" />
-            <span>Gatilho de Pagamento Automático:</span>
-          </p>
-          <p className="text-emerald-200/80">
-            Quando o cliente concordar em pagar ou pedir a compra, a IA emitirá a tag{" "}
-            <code className="bg-emerald-950 px-1.5 py-0.5 rounded text-white font-mono">
-              [GERAR_PAGAMENTO]
-            </code>
-            . O backend captura essa tag, remove do texto visível e monta o card com QR Code PIX imediatamente.
-          </p>
-        </div>
-
         <div>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
             <div>
-              <div className="flex items-center gap-2">
-                <label className="block text-xs font-semibold text-white">
-                  Prompt de Sistema Completo
-                </label>
-                {detectedTags.length > 0 && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                    <Sparkles className="w-2.5 h-2.5" />
-                    <span>{detectedTags.length} {detectedTags.length === 1 ? "tag ativa" : "tags ativas"}</span>
-                  </span>
-                )}
-              </div>
+              <label className="block text-xs font-semibold text-white">
+                Prompt de Sistema Completo
+              </label>
               <p className="text-[11px] text-[#8696a0] mt-0.5">
                 Clique nas tags abaixo para inseri-las diretamente no texto do prompt.
               </p>
@@ -192,7 +160,14 @@ export function TabPrompt({
 
             <div className="flex items-center gap-1.5 flex-wrap">
               {allTags
-                .filter((t) => t.type === "variable")
+                .filter(
+                  (t) =>
+                    t.type === "variable" &&
+                    t.category !== "timer" &&
+                    (t as any).category !== "status" &&
+                    !t.name.startsWith("[STATUS_CLIENTE") &&
+                    !t.name.startsWith("[TEMPO")
+                )
                 .map((tag) => (
                   <button
                     key={tag.id}
@@ -249,27 +224,6 @@ export function TabPrompt({
               </button>
             </div>
           </div>
-
-          {/* List of active detected tags in the current prompt */}
-          {detectedTags.length > 0 && (
-            <div className="flex items-center gap-1.5 flex-wrap mb-2.5 p-2 bg-[#182229] border border-[#222e35] rounded-xl text-xs">
-              <span className="text-[11px] font-semibold text-[#8696a0] flex items-center gap-1 mr-1">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                Tags Detectadas no Prompt:
-              </span>
-              {detectedTags.map((t) => {
-                const { pillClasses } = getTagStyle(t);
-                return (
-                  <span
-                    key={t}
-                    className={`font-mono text-[11px] px-2 py-0.5 rounded-md border font-medium ${pillClasses}`}
-                  >
-                    {t}
-                  </span>
-                );
-              })}
-            </div>
-          )}
 
           {/* Prompt Editor with Live Tag Syntax Highlighting */}
           <div className="relative w-full rounded-xl border border-[#222e35] focus-within:border-emerald-500 bg-[#202c33] overflow-hidden shadow-inner">

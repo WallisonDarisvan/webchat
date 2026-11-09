@@ -80,7 +80,7 @@ export const SYSTEM_DEFAULT_TAGS: PromptTag[] = [
     description: "Injetado quando o cliente possui cobrança PIX gerada aguardando pagamento.",
     value: "Status do Cliente no Banco",
     type: "variable",
-    category: "general",
+    category: "status" as any,
     isSystem: true,
   },
   {
@@ -89,7 +89,7 @@ export const SYSTEM_DEFAULT_TAGS: PromptTag[] = [
     description: "Injetado quando o cliente efetuou o pagamento com sucesso.",
     value: "Status do Cliente no Banco",
     type: "variable",
-    category: "general",
+    category: "status" as any,
     isSystem: true,
   },
   {
@@ -98,7 +98,7 @@ export const SYSTEM_DEFAULT_TAGS: PromptTag[] = [
     description: "Injetado quando o cliente recusou a compra ou o tempo limite do PIX expirou.",
     value: "Status do Cliente no Banco",
     type: "variable",
-    category: "general",
+    category: "status" as any,
     isSystem: true,
   },
 ];

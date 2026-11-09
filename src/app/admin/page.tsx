@@ -26,6 +26,7 @@ import { TabTimer } from "@/components/admin/tabs/TabTimer";
 import { TabTags } from "@/components/admin/tabs/TabTags";
 import { TabMedia } from "@/components/admin/tabs/TabMedia";
 import { TabProduct } from "@/components/admin/tabs/TabProduct";
+import { TabConversa } from "@/components/admin/tabs/TabConversa";
 import { TabStats } from "@/components/admin/tabs/TabStats";
 
 import { NewAttendantModal } from "@/components/admin/modals/NewAttendantModal";
@@ -784,7 +785,10 @@ export default function AdminPage() {
             />
           )}
 
-          {/* Tab 8: Stats & Audit */}
+          {/* Tab 8: Conversa com IA */}
+          {activeTab === "conversa" && <TabConversa config={config} />}
+
+          {/* Tab 9: Stats & Audit */}
           {activeTab === "stats" && <TabStats statsData={statsData} />}
         </main>
       </div>

@@ -10,6 +10,7 @@ import {
   Image as ImageIcon,
   DollarSign,
   BarChart3,
+  MessageSquare,
 } from "lucide-react";
 import { AdminTabType } from "./types";
 
@@ -123,6 +124,18 @@ export function AdminTabsNav({
       </button>
 
       <button
+        onClick={() => onSelectTab("conversa")}
+        className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all ${
+          activeTab === "conversa"
+            ? "bg-emerald-600 text-white shadow-md shadow-emerald-950"
+            : "bg-[#182229] text-[#8696a0] hover:text-white hover:bg-[#202c33]"
+        }`}
+      >
+        <MessageSquare className="w-4 h-4" />
+        <span>8. Conversa</span>
+      </button>
+
+      <button
         onClick={() => onSelectTab("stats")}
         className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all ${
           activeTab === "stats"
@@ -131,7 +144,7 @@ export function AdminTabsNav({
         }`}
       >
         <BarChart3 className="w-4 h-4" />
-        <span>8. Vendas & Auditoria</span>
+        <span>9. Vendas & Auditoria</span>
       </button>
     </div>
   );

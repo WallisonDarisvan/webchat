@@ -70,5 +70,6 @@ export type AdminTabType =
   | "tags"
   | "media"
   | "product"
+  | "conversa"
   | "stats";
 

@@ -989,7 +989,7 @@ export default function AdminPage() {
             }`}
           >
             <ImageIcon className="w-4 h-4" />
-            <span>5. Mídias & Instruções</span>
+            <span>5. Mídias</span>
             {mediaList.length > 0 && (
               <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-emerald-400/20 text-emerald-300 font-bold">
                 {mediaList.length}
@@ -1839,71 +1839,35 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Tab 5: Mídias & Instruções de Uso na IA */}
+        {/* Tab 5: Mídias & Amostras */}
         {activeTab === "media" && (
           <div className="space-y-6 animate-in fade-in duration-200">
-            {/* General Media Instructions Card */}
-            <div className="bg-[#111b21] border border-[#222e35] rounded-2xl p-6 shadow-xl space-y-4">
-              <div className="flex items-center justify-between border-b border-[#222e35] pb-4">
-                <div>
-                  <h2 className="text-base font-semibold text-white flex items-center gap-2">
-                    <ImageIcon className="w-5 h-5 text-emerald-400" />
-                    <span>Instruções Gerais de Uso de Mídias para a IA</span>
-                  </h2>
-                  <p className="text-xs text-[#8696a0] mt-1">
-                    Essas diretrizes ensinam o modelo como se comportar ao disparar fotos e amostras.
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    setConfig({ ...config, mediaInstructions: DEFAULT_MEDIA_INSTRUCTIONS })
+            {/* Max Agent Photos Limit Card */}
+            <div className="bg-[#111b21] border border-[#222e35] rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex-1">
+                <label className="text-xs font-semibold text-white flex items-center gap-1.5">
+                  <ShieldAlert className="w-4 h-4 text-emerald-400" />
+                  <span>Limite de Fotos que a IA Pode Enviar por Atendimento</span>
+                </label>
+                <p className="text-[11px] text-[#8696a0] mt-0.5">
+                  Quantidade máxima de fotos/amostras que a IA tem permissão de disparar para o mesmo cliente. Ao atingir essa cota, o servidor bloqueia sumariamente qualquer novo disparo de mídia.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <input
+                  type="number"
+                  min={0}
+                  max={20}
+                  value={config.maxAgentPhotos}
+                  onChange={(e) =>
+                    setConfig({
+                      ...config,
+                      maxAgentPhotos: Math.max(0, parseInt(e.target.value) || 0),
+                    })
                   }
-                  className="text-xs text-[#8696a0] hover:text-emerald-400 transition-colors flex items-center gap-1"
-                >
-                  <RefreshCw className="w-3 h-3" />
-                  <span>Restaurar Diretrizes</span>
-                </button>
-              </div>
-
-              <div>
-                <textarea
-                  rows={5}
-                  value={config.mediaInstructions}
-                  onChange={(e) => setConfig({ ...config, mediaInstructions: e.target.value })}
-                  placeholder="Defina regras gerais para o envio de imagens..."
-                  className="w-full px-4 py-3 bg-[#202c33] border border-[#222e35] focus:border-emerald-500 rounded-xl text-xs sm:text-sm text-white font-mono leading-relaxed outline-none resize-y"
+                  className="w-24 px-3 py-2 bg-[#202c33] border border-[#26353d] focus:border-emerald-500 rounded-xl text-center text-sm font-bold text-white outline-none"
                 />
-              </div>
-
-              {/* Max Agent Photos Limit Field */}
-              <div className="pt-3 border-t border-[#222e35] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex-1">
-                  <label className="text-xs font-semibold text-white flex items-center gap-1.5">
-                    <ShieldAlert className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Limite de Fotos que a IA Pode Enviar por Atendimento</span>
-                  </label>
-                  <p className="text-[11px] text-[#8696a0] mt-0.5">
-                    Quantidade máxima de fotos/amostras que a IA tem permissão de disparar para o mesmo cliente. Ao atingir essa cota, o servidor bloqueia sumariamente qualquer novo disparo de mídia.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <input
-                    type="number"
-                    min={0}
-                    max={20}
-                    value={config.maxAgentPhotos}
-                    onChange={(e) =>
-                      setConfig({
-                        ...config,
-                        maxAgentPhotos: Math.max(0, parseInt(e.target.value) || 0),
-                      })
-                    }
-                    className="w-24 px-3 py-2 bg-[#202c33] border border-[#222e35] focus:border-emerald-500 rounded-xl text-center text-sm font-bold text-white outline-none"
-                  />
-                  <span className="text-xs text-[#8696a0]">fotos</span>
-                </div>
+                <span className="text-xs text-[#8696a0]">fotos</span>
               </div>
             </div>
 

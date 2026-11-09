@@ -29,6 +29,7 @@ export async function generateAIResponse(params: {
   imageUrl?: string;
   systemDirective?: string;
   attendantId?: string;
+  clientStatus?: string;
 }): Promise<AIResponseResult> {
   const config = await getAppConfig(params.attendantId);
 
@@ -46,7 +47,8 @@ export async function generateAIResponse(params: {
       params.userName,
       config.productPrice,
       params.imageUrl,
-      mediaCatalogItems
+      mediaCatalogItems,
+      params.clientStatus
     );
     return simulated;
   }
@@ -93,6 +95,12 @@ ${mediaCatalogItems
     .replace(/\[TEMPO[-_]COOLDOWN\]/gi, cooldownTimeStr)
     .replace(/\[TEMPO\]/gi, postPurchaseTimeStr);
 
+  if (params.clientStatus) {
+    processedPrompt = processedPrompt
+      .replace(/\[STATUS_CLIENTE\]/gi, params.clientStatus)
+      .replace(/\[STATUS[-_]CLIENTE\]/gi, params.clientStatus);
+  }
+
   // Replace any custom configured tags
   try {
     const customTags: PromptTag[] = JSON.parse(config.customTags || "[]");
@@ -110,6 +118,11 @@ ${mediaCatalogItems
     directiveSection = `\n\n🚨 INSTRUÇÃO DO SISTEMA:\n${params.systemDirective}\nExecute esta instrução imediatamente mantendo total naturalidade em primeira pessoa e sem sair do personagem.`;
   }
 
+  let statusSection = "";
+  if (params.clientStatus) {
+    statusSection = `\n\n[STATUS_ATUAL_DO_CLIENTE]\n${params.clientStatus}`;
+  }
+
   // Build OpenAI-compatible chat payload
   const systemMessage = `${processedPrompt}
   
@@ -117,9 +130,11 @@ Informações do atendente, visitante e contexto atual:
 - Seu Nome (Atendente): ${effectiveAgentName}
 - Nome do visitante: ${params.userName || "Cliente"}
 - Nome do Produto: ${config.productName}
-- Preço do Produto: R$ ${config.productPrice.toFixed(2)}
+- Preço do Produto: R$ ${config.productPrice.toFixed(2)}${
+  params.clientStatus ? `\n- Status do Cliente: ${params.clientStatus}` : ""
+}
 - Lembre-se: quando o cliente concordar em comprar ou pedir para pagar, inclua no final do seu texto a tag [GERAR_PAGAMENTO]. NUNCA invente links de download falsos.
-- Se o cliente enviar imagens ou fotos (comprovantes, prints, fotos de produtos ou dúvidas), analise com atenção os elementos visuais e responda de forma natural e precisa.${mediaSection}${directiveSection}`;
+- Se o cliente enviar imagens ou fotos (comprovantes, prints, fotos de produtos ou dúvidas), analise com atenção os elementos visuais e responda de forma natural e precisa.${mediaSection}${directiveSection}${statusSection}`;
 
   // Format history messages into OpenAI/DeepSeek multimodal format
   const apiMessages = [
@@ -129,6 +144,9 @@ Informações do atendente, visitante e contexto atual:
         .replace(/\[GERAR_PAGAMENTO\]/g, "")
         .replace(/\[ENVIAR_MIDIA:[^\]]+\]/g, "")
         .replace(/\[ENCERRAR_CONVERSA\]/g, "")
+        .replace(/\[FINALIZAR_CONVERSA\]/g, "")
+        .replace(/\[STATUS_CLIENTE:[^\]]+\]/gi, "")
+        .replace(/\[STATUS_CLIENTE\]/gi, "")
         .trim();
 
       if (h.sender === "user" && h.imageUrl) {
@@ -245,7 +263,7 @@ function processAIContent(rawContent: string): AIResponseResult {
   const mediaMatch = rawContent.match(mediaTagRegex);
   const mediaIdToSend = mediaMatch ? mediaMatch[1] : null;
 
-  const endTagRegex = /\[ENCERRAR_CONVERSA\]/i;
+  const endTagRegex = /\[(ENCERRAR_CONVERSA|FINALIZAR_CONVERSA)\]/i;
   const shouldEndConversation = endTagRegex.test(rawContent);
 
   // Clean tags out of user-facing text
@@ -253,6 +271,8 @@ function processAIContent(rawContent: string): AIResponseResult {
     .replace(paymentTagRegex, "")
     .replace(mediaTagRegex, "")
     .replace(endTagRegex, "")
+    .replace(/\[STATUS_CLIENTE:[^\]]+\]/gi, "")
+    .replace(/\[STATUS_CLIENTE\]/gi, "")
     .trim();
 
   // Split into 1 to 3 conversational bubbles
@@ -276,10 +296,21 @@ function simulateAttendantResponse(
   userName: string,
   price: number,
   imageUrl?: string,
-  mediaCatalog: MediaItem[] = []
+  mediaCatalog: MediaItem[] = [],
+  clientStatus?: string
 ): AIResponseResult {
   if (imageUrl) {
     const text = `Recebi a sua foto aqui com sucesso, ${userName}! Deixa eu dar uma olhada nela com calma pra te orientar da melhor forma. Você quer me explicar mais algum detalhe sobre o que tá na imagem?`;
+    return processAIContent(text);
+  }
+
+  if (clientStatus === "[STATUS_CLIENTE: VENDA_CONCLUIDA]") {
+    const text = `Oi ${userName}! Seu pagamento já tá 100% confirmado! Conseguiu acessar tudo certinho pelo link de entrega? Qualquer dúvida que tiver, pode me mandar aqui!`;
+    return processAIContent(text);
+  }
+
+  if (clientStatus === "[STATUS_CLIENTE: VENDA_DESISTIU]") {
+    const text = `Tudo bem, ${userName}! Fica em paz. Se precisar de algo no futuro ou quiser tirar alguma dúvida, tô por aqui!`;
     return processAIContent(text);
   }
 

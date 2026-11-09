@@ -60,13 +60,20 @@ export function TabPrompt({
 
   // Find all distinct tags present in the current prompt text
   const detectedTags = useMemo(() => {
-    const matches = config.systemPrompt.match(/\[[A-Za-z0-9_\-:]+\]/g) || [];
+    const matches = config.systemPrompt.match(/\[[A-Za-z0-9_\-:]+(?:\s+[A-Za-z0-9_\-:]+)*\]/g) || [];
     return Array.from(new Set(matches));
   }, [config.systemPrompt]);
 
   // Helper to categorize tag and get appropriate badge theme
   const getTagStyle = (tag: string) => {
     const upper = tag.toUpperCase();
+    if (upper.includes("STATUS_CLIENTE") || upper.includes("STATUS")) {
+      return {
+        badgeClasses: "bg-purple-500/25 text-purple-300 ring-1 ring-purple-500/50 shadow-[0_0_8px_rgba(168,85,247,0.25)]",
+        pillClasses: "bg-purple-500/15 border-purple-500/30 text-purple-300",
+        type: "Status",
+      };
+    }
     if (
       upper.includes("TEMPO") ||
       upper.includes("TIMER") ||
@@ -102,7 +109,7 @@ export function TabPrompt({
   // Renders the highlighted backdrop text with tags distinctly badged
   const renderHighlightedContent = (text: string) => {
     if (!text) return null;
-    const TAG_REGEX = /(\[[A-Za-z0-9_\-:]+\])/g;
+    const TAG_REGEX = /(\[[A-Za-z0-9_\-:]+(?:\s+[A-Za-z0-9_\-:]+)*\])/g;
     const parts = text.split(TAG_REGEX);
 
     return parts.map((part, index) => {

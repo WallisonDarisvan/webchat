@@ -76,6 +76,7 @@ async function processSessionAI(sessionId: string) {
     const cfg = await getAppConfig(attendantIdent);
     const paidOrder = session.orders.find((o) => o.status === "paid");
     const pendingOrder = session.orders.find((o) => o.status === "pending");
+    const cancelledOrder = session.orders.find((o) => o.status === "cancelled" || o.status === "refunded");
     const now = new Date();
     let systemDirective: string | undefined = undefined;
     let shouldLockAfterResponse = false;
@@ -94,6 +95,25 @@ async function processSessionAI(sessionId: string) {
           lastUserImageUrl = parsed?.imageUrl;
         } catch {}
       }
+    }
+
+    const lowerUserMsg = lastUserMessage.toLowerCase();
+    const rejectionPattern = /(não\s+quero|nao\s+quero|não\s+vou\s+pagar|nao\s+vou\s+pagar|tá\s+caro|ta\s+caro|muito\s+caro|deixa\s+pra\s+l[aá]|não\s+tenho\s+dinheiro|nao\s+tenho\s+dinheiro|nem\s+pensar|não\s+vou\s+comprar|nao\s+vou\s+comprar|valeu\s+mas\s+não|valeu\s+mas\s+nao)/i;
+    const isCustomerRejection = rejectionPattern.test(lowerUserMsg);
+
+    // Determine client status in database for dynamic tag injection
+    let clientStatusTag: string | undefined = undefined;
+    if (paidOrder) {
+      clientStatusTag = "[STATUS_CLIENTE: VENDA_CONCLUIDA]";
+    } else if (
+      cancelledOrder ||
+      session.lockReason === "customer_rejected" ||
+      session.lockReason === "pix_timeout_ended" ||
+      isCustomerRejection
+    ) {
+      clientStatusTag = "[STATUS_CLIENTE: VENDA_DESISTIU]";
+    } else if (pendingOrder) {
+      clientStatusTag = "[STATUS_CLIENTE: VENDA_PENDENTE]";
     }
 
     // Check if session was previously locked, but 24h passed and user just sent a message (return scenario)
@@ -200,6 +220,7 @@ async function processSessionAI(sessionId: string) {
       imageUrl: lastUserImageUrl,
       systemDirective,
       attendantId: attendantIdent,
+      clientStatus: clientStatusTag,
     });
 
     // Deliver multi-bubbles with human typing pace

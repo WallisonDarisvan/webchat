@@ -74,6 +74,33 @@ export const SYSTEM_DEFAULT_TAGS: PromptTag[] = [
     category: "action",
     isSystem: true,
   },
+  {
+    id: "tag_status_venda_pendente",
+    name: "[STATUS_CLIENTE: VENDA_PENDENTE]",
+    description: "Injetado quando o cliente possui cobrança PIX gerada aguardando pagamento.",
+    value: "Status do Cliente no Banco",
+    type: "variable",
+    category: "general",
+    isSystem: true,
+  },
+  {
+    id: "tag_status_venda_concluida",
+    name: "[STATUS_CLIENTE: VENDA_CONCLUIDA]",
+    description: "Injetado quando o cliente efetuou o pagamento com sucesso.",
+    value: "Status do Cliente no Banco",
+    type: "variable",
+    category: "general",
+    isSystem: true,
+  },
+  {
+    id: "tag_status_venda_desistiu",
+    name: "[STATUS_CLIENTE: VENDA_DESISTIU]",
+    description: "Injetado quando o cliente recusou a compra ou o tempo limite do PIX expirou.",
+    value: "Status do Cliente no Banco",
+    type: "variable",
+    category: "general",
+    isSystem: true,
+  },
 ];
 
 export interface AppConfigData {

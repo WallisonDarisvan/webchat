@@ -5,6 +5,9 @@ export interface AdminConfig {
   slug?: string;
   bio?: string;
   isActive?: boolean;
+  showBio?: boolean;
+  showProductName?: boolean;
+  showProductPrice?: boolean;
   aiBaseUrl: string;
   aiApiKey: string;
   aiModel: string;

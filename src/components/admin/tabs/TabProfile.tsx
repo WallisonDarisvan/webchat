@@ -115,6 +115,71 @@ export function TabProfile({
               </span>
             </div>
           </div>
+
+          {/* Opções de Exibição no Cartão do Lobby */}
+          <div className="col-span-1 sm:col-span-2 pt-4 border-t border-[#222e35]/60 space-y-3">
+            <div>
+              <label className="block text-xs font-semibold text-white">
+                Elementos Visíveis no Cartão (Lobby)
+              </label>
+              <p className="text-[11px] text-[#8696a0] mt-0.5">
+                Escolha quais informações aparecem sobrepostas na foto do atendente na página inicial.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Exibir Bio */}
+              <div className="flex items-center gap-3 p-3 bg-[#182229] border border-[#26353d] rounded-xl">
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={config.showBio !== false}
+                    onChange={(e) => setConfig({ ...config, showBio: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-[#202c33] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                </label>
+                <div>
+                  <span className="text-xs font-medium text-white block">Exibir Bio</span>
+                  <span className="text-[10px] text-[#8696a0]">Descrição/cargo</span>
+                </div>
+              </div>
+
+              {/* Exibir Nome do Produto */}
+              <div className="flex items-center gap-3 p-3 bg-[#182229] border border-[#26353d] rounded-xl">
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={config.showProductName !== false}
+                    onChange={(e) => setConfig({ ...config, showProductName: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-[#202c33] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                </label>
+                <div>
+                  <span className="text-xs font-medium text-white block">Exibir Nome do Produto</span>
+                  <span className="text-[10px] text-[#8696a0]">Título do produto</span>
+                </div>
+              </div>
+
+              {/* Exibir Preço do Produto */}
+              <div className="flex items-center gap-3 p-3 bg-[#182229] border border-[#26353d] rounded-xl">
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={config.showProductPrice !== false}
+                    onChange={(e) => setConfig({ ...config, showProductPrice: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-[#202c33] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                </label>
+                <div>
+                  <span className="text-xs font-medium text-white block">Exibir Preço</span>
+                  <span className="text-[10px] text-[#8696a0]">Valor no topo</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Upload Foto da Atendente */}

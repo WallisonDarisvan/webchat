@@ -108,6 +108,9 @@ export interface AppConfigData {
   slug?: string;
   bio?: string;
   isActive?: boolean;
+  showBio?: boolean;
+  showProductName?: boolean;
+  showProductPrice?: boolean;
   aiBaseUrl: string;
   aiApiKey: string;
   aiModel: string;
@@ -168,6 +171,9 @@ export const DEFAULT_CONFIG: AppConfigData = {
   slug: "gabriel",
   bio: "Especialista em Vendas e Atendimento",
   isActive: true,
+  showBio: true,
+  showProductName: true,
+  showProductPrice: true,
   aiBaseUrl: process.env.AI_BASE_URL || "https://api.deepseek.com",
   aiApiKey: process.env.AI_API_KEY || "",
   aiModel: process.env.AI_MODEL || "deepseek-chat",
@@ -197,6 +203,9 @@ function mapAttendantToConfig(attendant: any): AppConfigData {
     slug: attendant.slug,
     bio: attendant.bio || "Especialista em Vendas e Atendimento",
     isActive: typeof attendant.isActive !== "undefined" ? Boolean(attendant.isActive) : true,
+    showBio: typeof attendant.showBio !== "undefined" ? Boolean(attendant.showBio) : (typeof attendant.show_bio !== "undefined" ? Boolean(attendant.show_bio) : true),
+    showProductName: typeof attendant.showProductName !== "undefined" ? Boolean(attendant.showProductName) : (typeof attendant.show_product_name !== "undefined" ? Boolean(attendant.show_product_name) : true),
+    showProductPrice: typeof attendant.showProductPrice !== "undefined" ? Boolean(attendant.showProductPrice) : (typeof attendant.show_product_price !== "undefined" ? Boolean(attendant.show_product_price) : true),
     aiBaseUrl: attendant.aiBaseUrl || DEFAULT_CONFIG.aiBaseUrl,
     aiApiKey: attendant.aiApiKey || process.env.AI_API_KEY || "",
     aiModel: attendant.aiModel || DEFAULT_CONFIG.aiModel,
@@ -239,11 +248,22 @@ export async function getAllAttendants(onlyActive = false): Promise<AppConfigDat
 async function enrichAttendantDeliveryMessage(config: AppConfigData, attendantId: string): Promise<AppConfigData> {
   try {
     const rows: any[] = await prisma.$queryRawUnsafe(
-      `SELECT product_delivery_message FROM attendants WHERE id = ?`,
+      `SELECT product_delivery_message, show_bio, show_product_name, show_product_price FROM attendants WHERE id = ?`,
       attendantId
     );
-    if (rows?.[0]?.product_delivery_message) {
-      config.productDeliveryMessage = rows[0].product_delivery_message;
+    if (rows?.[0]) {
+      if (rows[0].product_delivery_message) {
+        config.productDeliveryMessage = rows[0].product_delivery_message;
+      }
+      if (typeof rows[0].show_bio !== "undefined" && rows[0].show_bio !== null) {
+        config.showBio = Boolean(rows[0].show_bio);
+      }
+      if (typeof rows[0].show_product_name !== "undefined" && rows[0].show_product_name !== null) {
+        config.showProductName = Boolean(rows[0].show_product_name);
+      }
+      if (typeof rows[0].show_product_price !== "undefined" && rows[0].show_product_price !== null) {
+        config.showProductPrice = Boolean(rows[0].show_product_price);
+      }
     }
   } catch {}
   return config;

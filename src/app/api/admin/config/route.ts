@@ -111,6 +111,21 @@ export async function PUT(req: NextRequest) {
         }
       }
 
+      const showBioVal = typeof data.showBio !== "undefined" ? (data.showBio ? 1 : 0) : 1;
+      const showProductNameVal = typeof data.showProductName !== "undefined" ? (data.showProductName ? 1 : 0) : 1;
+      const showProductPriceVal = typeof data.showProductPrice !== "undefined" ? (data.showProductPrice ? 1 : 0) : 1;
+      try {
+        await prisma.$executeRawUnsafe(
+          `UPDATE attendants SET show_bio = ?, show_product_name = ?, show_product_price = ? WHERE id = ?`,
+          showBioVal,
+          showProductNameVal,
+          showProductPriceVal,
+          existingAttendant.id
+        );
+      } catch (err) {
+        console.warn("Could not update show flags:", err);
+      }
+
       const customTagsVal = typeof data.customTags !== "undefined"
         ? (typeof data.customTags === "string" ? data.customTags : JSON.stringify(data.customTags))
         : "[]";
@@ -123,6 +138,9 @@ export async function PUT(req: NextRequest) {
           agentAvatar: updatedAttendant.avatar,
           productPrice: Number(updatedAttendant.productPrice),
           customTags: customTagsVal,
+          showBio: Boolean(showBioVal),
+          showProductName: Boolean(showProductNameVal),
+          showProductPrice: Boolean(showProductPriceVal),
         },
       });
     }

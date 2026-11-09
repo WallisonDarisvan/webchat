@@ -12,6 +12,9 @@ interface PublicAttendant {
   bio: string;
   productName: string;
   productPrice: number;
+  showBio?: boolean;
+  showProductName?: boolean;
+  showProductPrice?: boolean;
 }
 
 export default function AttendantsLobbyPage() {
@@ -148,7 +151,7 @@ export default function AttendantsLobbyPage() {
                       Online agora
                     </span>
 
-                    {attendant.productPrice > 0 && (
+                    {attendant.showProductPrice !== false && attendant.productPrice > 0 && (
                       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-white text-[11px] font-bold shadow-md">
                         <span className="text-emerald-400">
                           R$ {Number(attendant.productPrice).toFixed(2).replace(".", ",")}
@@ -164,12 +167,12 @@ export default function AttendantsLobbyPage() {
                         <span>{attendant.name}</span>
                         <UserCheck className="w-4 h-4 text-emerald-400 shrink-0" />
                       </h3>
-                      {attendant.bio && (
+                      {attendant.showBio !== false && attendant.bio && (
                         <p className="text-xs text-white/80 line-clamp-1 drop-shadow-sm mt-0.5">
                           {attendant.bio}
                         </p>
                       )}
-                      {attendant.productName && (
+                      {attendant.showProductName !== false && attendant.productName && (
                         <p className="text-[11px] text-emerald-300 font-medium line-clamp-1 drop-shadow-sm">
                           {attendant.productName}
                         </p>

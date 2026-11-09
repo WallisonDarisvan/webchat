@@ -159,8 +159,14 @@ export async function ensureDatabaseSchema(): Promise<void> {
       { table: "attendants", column: "is_active", sql: `ALTER TABLE "attendants" ADD COLUMN "is_active" BOOLEAN DEFAULT 1` },
       { table: "attendants", column: "custom_tags", sql: `ALTER TABLE "attendants" ADD COLUMN "custom_tags" TEXT DEFAULT '[]'` },
       { table: "attendants", column: "product_delivery_message", sql: `ALTER TABLE "attendants" ADD COLUMN "product_delivery_message" TEXT DEFAULT ''` },
+      { table: "attendants", column: "show_bio", sql: `ALTER TABLE "attendants" ADD COLUMN "show_bio" BOOLEAN DEFAULT 1` },
+      { table: "attendants", column: "show_product_name", sql: `ALTER TABLE "attendants" ADD COLUMN "show_product_name" BOOLEAN DEFAULT 1` },
+      { table: "attendants", column: "show_product_price", sql: `ALTER TABLE "attendants" ADD COLUMN "show_product_price" BOOLEAN DEFAULT 1` },
       { table: "app_configs", column: "custom_tags", sql: `ALTER TABLE "app_configs" ADD COLUMN "custom_tags" TEXT DEFAULT '[]'` },
       { table: "app_configs", column: "product_delivery_message", sql: `ALTER TABLE "app_configs" ADD COLUMN "product_delivery_message" TEXT DEFAULT ''` },
+      { table: "app_configs", column: "show_bio", sql: `ALTER TABLE "app_configs" ADD COLUMN "show_bio" BOOLEAN DEFAULT 1` },
+      { table: "app_configs", column: "show_product_name", sql: `ALTER TABLE "app_configs" ADD COLUMN "show_product_name" BOOLEAN DEFAULT 1` },
+      { table: "app_configs", column: "show_product_price", sql: `ALTER TABLE "app_configs" ADD COLUMN "show_product_price" BOOLEAN DEFAULT 1` },
     ];
 
     const tables = ["app_configs", "chat_sessions", "orders", "attendants"];

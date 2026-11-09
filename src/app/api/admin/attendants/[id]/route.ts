@@ -31,7 +31,30 @@ export async function GET(
       return NextResponse.json({ error: "Atendente não encontrado" }, { status: 404 });
     }
 
-    return NextResponse.json({ success: true, attendant });
+    let showBio = true;
+    let showProductName = true;
+    let showProductPrice = true;
+    try {
+      const rows: any[] = await prisma.$queryRawUnsafe(
+        `SELECT show_bio, show_product_name, show_product_price FROM attendants WHERE id = ?`,
+        attendant.id
+      );
+      if (rows?.[0]) {
+        if (typeof rows[0].show_bio !== "undefined" && rows[0].show_bio !== null) showBio = Boolean(rows[0].show_bio);
+        if (typeof rows[0].show_product_name !== "undefined" && rows[0].show_product_name !== null) showProductName = Boolean(rows[0].show_product_name);
+        if (typeof rows[0].show_product_price !== "undefined" && rows[0].show_product_price !== null) showProductPrice = Boolean(rows[0].show_product_price);
+      }
+    } catch {}
+
+    return NextResponse.json({
+      success: true,
+      attendant: {
+        ...attendant,
+        showBio,
+        showProductName,
+        showProductPrice,
+      },
+    });
   } catch (error) {
     console.error("Error in GET /api/admin/attendants/[id]:", error);
     return NextResponse.json({ error: "Erro interno" }, { status: 500 });
@@ -114,7 +137,30 @@ export async function PUT(
       }
     }
 
-    return NextResponse.json({ success: true, attendant: updated });
+    const showBio = typeof body.showBio !== "undefined" ? (body.showBio ? 1 : 0) : 1;
+    const showProductName = typeof body.showProductName !== "undefined" ? (body.showProductName ? 1 : 0) : 1;
+    const showProductPrice = typeof body.showProductPrice !== "undefined" ? (body.showProductPrice ? 1 : 0) : 1;
+    try {
+      await prisma.$executeRawUnsafe(
+        `UPDATE attendants SET show_bio = ?, show_product_name = ?, show_product_price = ? WHERE id = ?`,
+        showBio,
+        showProductName,
+        showProductPrice,
+        existing.id
+      );
+    } catch (err) {
+      console.warn("Could not update show flags:", err);
+    }
+
+    return NextResponse.json({
+      success: true,
+      attendant: {
+        ...updated,
+        showBio: Boolean(showBio),
+        showProductName: Boolean(showProductName),
+        showProductPrice: Boolean(showProductPrice),
+      },
+    });
   } catch (error) {
     console.error("Error updating attendant:", error);
     const msg = error instanceof Error ? error.message : "Erro ao atualizar atendente";

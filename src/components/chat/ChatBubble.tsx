@@ -1,7 +1,7 @@
 "use client";
 
-import React from "react";
-import { CheckCheck, ExternalLink } from "lucide-react";
+import React, { useState } from "react";
+import { CheckCheck, ExternalLink, Eye, EyeOff, Maximize2 } from "lucide-react";
 import { PaymentCard } from "./PaymentCard";
 
 export interface MessageData {
@@ -38,6 +38,7 @@ export function ChatBubble({
   const isUser = message.sender === "user";
   const isSystem = message.sender === "system";
   const initials = getInitials(agentName);
+  const [isBlurred, setIsBlurred] = useState(false);
 
   // Check if it's a payment card message
   if (isSystem && message.metadata?.type === "payment_card") {
@@ -188,13 +189,66 @@ export function ChatBubble({
         ) : (
           /* Render normal attached image if available */
           imageUrl && (
-            <div className={`${hasVisibleText ? "mb-2" : ""} overflow-hidden rounded-xl bg-black/30 border border-black/20`}>
+            <div
+              className={`${
+                hasVisibleText ? "mb-2" : ""
+              } relative overflow-hidden rounded-xl bg-black/30 border border-black/20 group select-none`}
+            >
               <img
                 src={imageUrl}
                 alt="Foto enviada"
-                className="max-h-72 w-full object-contain cursor-pointer hover:opacity-95 transition-opacity"
-                onClick={() => window.open(imageUrl!, "_blank")}
+                className={`max-h-72 w-full object-contain cursor-pointer transition-all duration-300 ${
+                  isUser && isBlurred ? "blur-xl scale-105 brightness-75" : "blur-0 scale-100"
+                } hover:opacity-95`}
+                onClick={() => {
+                  if (isUser) {
+                    setIsBlurred((prev) => !prev);
+                  } else {
+                    window.open(imageUrl!, "_blank");
+                  }
+                }}
               />
+
+              {/* User Photo Interaction: Blur / Focus Overlay & Action Indicators */}
+              {isUser && (
+                <>
+                  {/* Blurred State Overlay */}
+                  {isBlurred && (
+                    <div
+                      onClick={() => setIsBlurred(false)}
+                      className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 backdrop-blur-[2px] cursor-pointer transition-all p-3"
+                    >
+                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/75 border border-white/20 text-white text-xs font-medium shadow-xl hover:bg-black/90 transition-all hover:scale-105">
+                        <EyeOff className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Desfocada • Toque para focar</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Focused State subtle hint (visible on hover / discreet badge) */}
+                  {!isBlurred && (
+                    <div className="absolute top-2 right-2 pointer-events-none transition-opacity opacity-0 group-hover:opacity-100 sm:opacity-75">
+                      <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 text-[10px] text-white/90 shadow">
+                        <Eye className="w-3 h-3 text-emerald-400" />
+                        <span>Toque para desfocar</span>
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Open in full resolution button */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      window.open(imageUrl!, "_blank");
+                    }}
+                    className="absolute top-2 left-2 p-1.5 rounded-full bg-black/60 hover:bg-black/80 text-white/80 hover:text-white backdrop-blur-sm border border-white/10 shadow transition-all opacity-0 group-hover:opacity-100 sm:opacity-75"
+                    title="Abrir imagem em tela cheia"
+                  >
+                    <Maximize2 className="w-3 h-3" />
+                  </button>
+                </>
+              )}
             </div>
           )
         )}

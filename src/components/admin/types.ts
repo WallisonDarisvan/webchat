@@ -68,3 +68,4 @@ export type AdminTabType =
   | "media"
   | "product"
   | "stats";
+

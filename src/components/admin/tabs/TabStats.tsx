@@ -114,3 +114,4 @@ export function TabStats({ statsData }: TabStatsProps) {
     </div>
   );
 }
+

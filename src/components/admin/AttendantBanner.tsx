@@ -85,3 +85,4 @@ export function AttendantBanner({ config, appUrl }: AttendantBannerProps) {
     </div>
   );
 }
+

@@ -19,6 +19,7 @@ export function VisitorModal({
   agentName = "Gabriel Siqueira",
 }: VisitorModalProps) {
   const [name, setName] = useState("");
+  const [imgRatio, setImgRatio] = useState<string>("3 / 4");
 
   if (!isOpen) return null;
 
@@ -39,26 +40,38 @@ export function VisitorModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
-      <div className="w-full max-w-sm bg-[#111b21] border border-[#222e35] rounded-2xl shadow-2xl overflow-hidden text-center relative">
-        {/* Capa 1:1 */}
-        <div className="relative w-full aspect-square overflow-hidden bg-[#182229]">
+      <div className="w-full max-w-sm bg-[#111b21] border border-[#222e35] rounded-2xl shadow-2xl overflow-hidden text-center relative max-h-[92vh] flex flex-col overflow-y-auto">
+        {/* Capa com altura proporcional à imagem real */}
+        <div
+          className="relative w-full overflow-hidden bg-[#182229] shrink-0 transition-all duration-300"
+          style={{
+            aspectRatio: imgRatio,
+            maxHeight: "56vh",
+          }}
+        >
           {agentAvatar ? (
             <img
               src={agentAvatar}
               alt={agentName}
+              onLoad={(e) => {
+                const img = e.currentTarget;
+                if (img.naturalWidth && img.naturalHeight) {
+                  setImgRatio(`${img.naturalWidth} / ${img.naturalHeight}`);
+                }
+              }}
               className="w-full h-full object-cover object-top"
             />
           ) : (
-            <div className="w-full h-full bg-gradient-to-tr from-emerald-950 via-[#182229] to-[#111b21] flex items-center justify-center">
+            <div className="w-full h-full bg-gradient-to-tr from-emerald-950 via-[#182229] to-[#111b21] flex items-center justify-center min-h-[300px]">
               <span className="text-4xl font-bold text-emerald-400/40">{initials}</span>
             </div>
           )}
 
           {/* Gradiente suave na parte inferior da capa para fundir com o card */}
-          <div className="absolute inset-0 bg-gradient-to-t from-[#111b21] via-[#111b21]/30 to-black/20" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#111b21] via-[#111b21]/20 to-black/10 pointer-events-none" />
 
           {/* Badge Online discreta */}
-          <div className="absolute top-3 right-3">
+          <div className="absolute top-3 right-3 pointer-events-none">
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-emerald-400 text-[11px] font-medium shadow-md">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
               Online agora

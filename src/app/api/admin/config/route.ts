@@ -22,9 +22,12 @@ export async function GET(req: NextRequest) {
     const config = await getAppConfig(attendantId);
     try {
       if (config.id && config.id !== "global") {
-        const rows: any[] = await prisma.$queryRawUnsafe(`SELECT custom_tags FROM attendants WHERE id = ?`, config.id);
+        const rows: any[] = await prisma.$queryRawUnsafe(`SELECT custom_tags, product_delivery_message FROM attendants WHERE id = ?`, config.id);
         if (rows?.[0]?.custom_tags) {
           config.customTags = rows[0].custom_tags;
+        }
+        if (rows?.[0]?.product_delivery_message) {
+          config.productDeliveryMessage = rows[0].product_delivery_message;
         }
       }
     } catch {}
@@ -93,6 +96,18 @@ export async function PUT(req: NextRequest) {
           );
         } catch (err) {
           console.warn("Could not update custom_tags:", err);
+        }
+      }
+
+      if (typeof data.productDeliveryMessage !== "undefined") {
+        try {
+          await prisma.$executeRawUnsafe(
+            `UPDATE attendants SET product_delivery_message = ? WHERE id = ?`,
+            data.productDeliveryMessage,
+            existingAttendant.id
+          );
+        } catch (err) {
+          console.warn("Could not update product_delivery_message:", err);
         }
       }
 
@@ -165,6 +180,15 @@ export async function PUT(req: NextRequest) {
         cooldownHours: typeof data.cooldownHours !== "undefined" ? parseInt(data.cooldownHours) || 24 : 24,
       },
     });
+
+    if (typeof data.productDeliveryMessage !== "undefined") {
+      try {
+        await prisma.$executeRawUnsafe(
+          `UPDATE app_configs SET product_delivery_message = ? WHERE id = 'global'`,
+          data.productDeliveryMessage
+        );
+      } catch {}
+    }
 
     return NextResponse.json({
       success: true,

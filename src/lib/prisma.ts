@@ -48,6 +48,7 @@ export async function ensureDatabaseSchema(): Promise<void> {
         "product_name" TEXT NOT NULL DEFAULT 'Método Alta Conversão',
         "product_price" REAL NOT NULL DEFAULT 97.0,
         "product_delivery_link" TEXT NOT NULL DEFAULT 'https://seusite.com/download/acesso-vip',
+        "product_delivery_message" TEXT NOT NULL DEFAULT '',
         "payment_gateway" TEXT NOT NULL DEFAULT 'simulated',
         "payment_gateway_token" TEXT NOT NULL DEFAULT '',
         "payment_webhook_secret" TEXT NOT NULL DEFAULT '',
@@ -126,6 +127,7 @@ export async function ensureDatabaseSchema(): Promise<void> {
         "product_name" TEXT NOT NULL DEFAULT 'Método Alta Conversão',
         "product_price" REAL NOT NULL DEFAULT 97.0,
         "product_delivery_link" TEXT NOT NULL DEFAULT 'https://seusite.com/download/acesso-vip',
+        "product_delivery_message" TEXT NOT NULL DEFAULT '',
         "payment_gateway" TEXT NOT NULL DEFAULT 'simulated',
         "payment_gateway_token" TEXT NOT NULL DEFAULT '',
         "payment_webhook_secret" TEXT NOT NULL DEFAULT '',
@@ -156,7 +158,9 @@ export async function ensureDatabaseSchema(): Promise<void> {
       { table: "attendants", column: "bio", sql: `ALTER TABLE "attendants" ADD COLUMN "bio" TEXT DEFAULT 'Especialista em Vendas e Atendimento'` },
       { table: "attendants", column: "is_active", sql: `ALTER TABLE "attendants" ADD COLUMN "is_active" BOOLEAN DEFAULT 1` },
       { table: "attendants", column: "custom_tags", sql: `ALTER TABLE "attendants" ADD COLUMN "custom_tags" TEXT DEFAULT '[]'` },
+      { table: "attendants", column: "product_delivery_message", sql: `ALTER TABLE "attendants" ADD COLUMN "product_delivery_message" TEXT DEFAULT ''` },
       { table: "app_configs", column: "custom_tags", sql: `ALTER TABLE "app_configs" ADD COLUMN "custom_tags" TEXT DEFAULT '[]'` },
+      { table: "app_configs", column: "product_delivery_message", sql: `ALTER TABLE "app_configs" ADD COLUMN "product_delivery_message" TEXT DEFAULT ''` },
     ];
 
     const tables = ["app_configs", "chat_sessions", "orders", "attendants"];

@@ -1,6 +1,6 @@
 import QRCode from "qrcode";
 import { prisma } from "./prisma";
-import { getAppConfig } from "./config";
+import { getAppConfig, DEFAULT_DELIVERY_MESSAGE } from "./config";
 import { sessionEvents } from "./events";
 
 export interface CreateOrderParams {
@@ -159,8 +159,22 @@ export async function markOrderAsPaid(orderId: string): Promise<{ success: boole
   });
 
   // Build the congratulatory message with delivery link
-  const deliveryUrl = order.deliveryLink || (await getAppConfig()).productDeliveryLink;
-  const deliveryMessageContent = `🎉 Pagamento confirmado com sucesso! Muito obrigado pela confiança, ${order.session.userName}.\n\nSeu acesso exclusivo já está 100% liberado! Você pode acessar o seu produto agora mesmo pelo link seguro abaixo:\n\n👉 ${deliveryUrl}\n\nSe tiver qualquer dúvida, pode me chamar por aqui. Bons estudos e muito sucesso!`;
+  const config = await getAppConfig(order.attendantId || undefined);
+  const deliveryUrl = order.deliveryLink || config.productDeliveryLink;
+  const rawTemplate = config.productDeliveryMessage || DEFAULT_DELIVERY_MESSAGE;
+
+  let deliveryMessageContent = rawTemplate
+    .replace(/\[CLIENTE\]/gi, order.session.userName)
+    .replace(/\[NOME_CLIENTE\]/gi, order.session.userName)
+    .replace(/\[NOME\]/gi, order.session.userName)
+    .replace(/\[LINK_ENTREGA\]/gi, deliveryUrl)
+    .replace(/\[LINK\]/gi, deliveryUrl)
+    .replace(/\[PRODUTO\]/gi, config.productName);
+
+  // Safety fallback: if the admin omitted the link token, ensure the link is appended
+  if (!deliveryMessageContent.includes(deliveryUrl)) {
+    deliveryMessageContent += `\n\n👉 ${deliveryUrl}`;
+  }
 
   const agentMessage = await prisma.chatMessage.create({
     data: {

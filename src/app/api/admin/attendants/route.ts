@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma, ensureDatabaseSchema } from "@/lib/prisma";
-import { DEFAULT_CONFIG, DEFAULT_SYSTEM_PROMPT, DEFAULT_MEDIA_INSTRUCTIONS } from "@/lib/config";
+import { DEFAULT_CONFIG, DEFAULT_SYSTEM_PROMPT, DEFAULT_MEDIA_INSTRUCTIONS, DEFAULT_DELIVERY_MESSAGE } from "@/lib/config";
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin";
 const COOKIE_NAME = "admin_auth_token";
@@ -97,6 +97,16 @@ export async function POST(req: NextRequest) {
         cooldownHours: body.cooldownHours ?? 24,
       },
     });
+
+    if (body.productDeliveryMessage) {
+      try {
+        await prisma.$executeRawUnsafe(
+          `UPDATE attendants SET product_delivery_message = ? WHERE id = ?`,
+          body.productDeliveryMessage,
+          newAttendant.id
+        );
+      } catch {}
+    }
 
     return NextResponse.json({ success: true, attendant: newAttendant });
   } catch (error) {

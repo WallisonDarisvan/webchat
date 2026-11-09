@@ -91,6 +91,7 @@ export interface AppConfigData {
   productName: string;
   productPrice: number;
   productDeliveryLink: string;
+  productDeliveryMessage?: string;
   paymentGateway: string;
   paymentGatewayToken: string;
   paymentWebhookSecret: string;
@@ -127,6 +128,14 @@ export const DEFAULT_MEDIA_INSTRUCTIONS = `Diretrizes de Envio de Mídias para a
 3. Para disparar o envio de uma imagem cadastrada, inclua no final da sua mensagem a tag de controle exata correspondente: [ENVIAR_MIDIA:id_da_midia].
 4. Envie no máximo 1 mídia por vez para manter a conversa humanizada e dinâmica.`;
 
+export const DEFAULT_DELIVERY_MESSAGE = `🎉 Pagamento confirmado com sucesso! Muito obrigado pela confiança, [CLIENTE].
+
+Seu acesso exclusivo já está 100% liberado! Você pode acessar o seu produto agora mesmo pelo link seguro abaixo:
+
+👉 [LINK_ENTREGA]
+
+Se tiver qualquer dúvida, pode me chamar por aqui. Bons estudos e muito sucesso!`;
+
 export const DEFAULT_CONFIG: AppConfigData = {
   id: "global",
   slug: "gabriel",
@@ -142,6 +151,7 @@ export const DEFAULT_CONFIG: AppConfigData = {
   productName: "Acesso Exclusivo - Método de Alta Conversão",
   productPrice: 97.00,
   productDeliveryLink: "https://seusite.com/download/acesso-vip",
+  productDeliveryMessage: DEFAULT_DELIVERY_MESSAGE,
   paymentGateway: "simulated",
   paymentGatewayToken: "",
   paymentWebhookSecret: "",
@@ -170,6 +180,7 @@ function mapAttendantToConfig(attendant: any): AppConfigData {
     productName: attendant.productName || DEFAULT_CONFIG.productName,
     productPrice: Number(attendant.productPrice) || DEFAULT_CONFIG.productPrice,
     productDeliveryLink: attendant.productDeliveryLink || DEFAULT_CONFIG.productDeliveryLink,
+    productDeliveryMessage: attendant.productDeliveryMessage || attendant.product_delivery_message || DEFAULT_DELIVERY_MESSAGE,
     paymentGateway: attendant.paymentGateway || DEFAULT_CONFIG.paymentGateway,
     paymentGatewayToken: attendant.paymentGatewayToken || "",
     paymentWebhookSecret: attendant.paymentWebhookSecret || "",
@@ -198,6 +209,19 @@ export async function getAllAttendants(onlyActive = false): Promise<AppConfigDat
   }
 }
 
+async function enrichAttendantDeliveryMessage(config: AppConfigData, attendantId: string): Promise<AppConfigData> {
+  try {
+    const rows: any[] = await prisma.$queryRawUnsafe(
+      `SELECT product_delivery_message FROM attendants WHERE id = ?`,
+      attendantId
+    );
+    if (rows?.[0]?.product_delivery_message) {
+      config.productDeliveryMessage = rows[0].product_delivery_message;
+    }
+  } catch {}
+  return config;
+}
+
 export async function getAppConfig(identifier?: string): Promise<AppConfigData> {
   try {
     await ensureDatabaseSchema();
@@ -210,7 +234,7 @@ export async function getAppConfig(identifier?: string): Promise<AppConfigData> 
         },
       });
       if (found) {
-        return mapAttendantToConfig(found);
+        return await enrichAttendantDeliveryMessage(mapAttendantToConfig(found), found.id);
       }
     }
 
@@ -220,7 +244,7 @@ export async function getAppConfig(identifier?: string): Promise<AppConfigData> 
       orderBy: { createdAt: "asc" },
     });
     if (firstActive) {
-      return mapAttendantToConfig(firstActive);
+      return await enrichAttendantDeliveryMessage(mapAttendantToConfig(firstActive), firstActive.id);
     }
 
     // 3. Fallback to any attendant
@@ -228,7 +252,7 @@ export async function getAppConfig(identifier?: string): Promise<AppConfigData> 
       orderBy: { createdAt: "asc" },
     });
     if (anyAttendant) {
-      return mapAttendantToConfig(anyAttendant);
+      return await enrichAttendantDeliveryMessage(mapAttendantToConfig(anyAttendant), anyAttendant.id);
     }
 
     // 4. Fallback to legacy app_configs or DEFAULT_CONFIG
@@ -251,6 +275,7 @@ export async function getAppConfig(identifier?: string): Promise<AppConfigData> 
         productName: legacy.productName || DEFAULT_CONFIG.productName,
         productPrice: Number(legacy.productPrice) || DEFAULT_CONFIG.productPrice,
         productDeliveryLink: legacy.productDeliveryLink || DEFAULT_CONFIG.productDeliveryLink,
+        productDeliveryMessage: (legacy as any).productDeliveryMessage || (legacy as any).product_delivery_message || DEFAULT_DELIVERY_MESSAGE,
         paymentGateway: legacy.paymentGateway || DEFAULT_CONFIG.paymentGateway,
         paymentGatewayToken: legacy.paymentGatewayToken || "",
         paymentWebhookSecret: legacy.paymentWebhookSecret || "",

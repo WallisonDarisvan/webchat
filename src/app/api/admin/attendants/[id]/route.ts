@@ -102,6 +102,18 @@ export async function PUT(
       },
     });
 
+    if (typeof body.productDeliveryMessage !== "undefined") {
+      try {
+        await prisma.$executeRawUnsafe(
+          `UPDATE attendants SET product_delivery_message = ? WHERE id = ?`,
+          body.productDeliveryMessage,
+          existing.id
+        );
+      } catch (err) {
+        console.warn("Could not update product_delivery_message:", err);
+      }
+    }
+
     return NextResponse.json({ success: true, attendant: updated });
   } catch (error) {
     console.error("Error updating attendant:", error);

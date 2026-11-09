@@ -19,17 +19,18 @@ const globalForPrisma = globalThis as unknown as {
 export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
-    log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
+    log: ["warn"],
   });
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
-let schemaEnsured = false;
+let schemaPromise: Promise<void> | null = null;
 
-export async function ensureDatabaseSchema() {
-  if (schemaEnsured) return;
+export async function ensureDatabaseSchema(): Promise<void> {
+  if (schemaPromise) return schemaPromise;
 
-  try {
+  schemaPromise = (async () => {
+    try {
     // 1. Ensure all core tables exist in SQLite
     await prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS "attendants" (
@@ -139,7 +140,7 @@ export async function ensureDatabaseSchema() {
       );
     `);
 
-    // 2. Ensure all columns exist (checks table_info first to avoid noisy terminal logs)
+    // 2. Ensure all columns exist (checks table_info once per table to avoid duplicate column logs)
     const requiredColumns = [
       { table: "app_configs", column: "agent_avatar", sql: `ALTER TABLE "app_configs" ADD COLUMN "agent_avatar" TEXT DEFAULT ''` },
       { table: "app_configs", column: "post_purchase_minutes", sql: `ALTER TABLE "app_configs" ADD COLUMN "post_purchase_minutes" INTEGER DEFAULT 10` },
@@ -158,15 +159,26 @@ export async function ensureDatabaseSchema() {
       { table: "app_configs", column: "custom_tags", sql: `ALTER TABLE "app_configs" ADD COLUMN "custom_tags" TEXT DEFAULT '[]'` },
     ];
 
-    for (const item of requiredColumns) {
+    const tables = ["app_configs", "chat_sessions", "orders", "attendants"];
+    const existingTableColumns: Record<string, Set<string>> = {};
+
+    for (const tbl of tables) {
       try {
-        const columns = await prisma.$queryRawUnsafe<any[]>(`PRAGMA table_info("${item.table}")`);
-        const exists = columns.some((c: any) => c.name === item.column);
-        if (!exists) {
-          await prisma.$executeRawUnsafe(item.sql);
-        }
+        const cols = await prisma.$queryRawUnsafe<any[]>(`PRAGMA table_info("${tbl}")`);
+        existingTableColumns[tbl] = new Set(cols.map((c: any) => c.name));
       } catch {
-        // Table or column check error, safe to ignore
+        existingTableColumns[tbl] = new Set();
+      }
+    }
+
+    for (const item of requiredColumns) {
+      if (!existingTableColumns[item.table]?.has(item.column)) {
+        try {
+          await prisma.$executeRawUnsafe(item.sql);
+          existingTableColumns[item.table]?.add(item.column);
+        } catch {
+          // duplicate column or locked table, safe to ignore
+        }
       }
     }
 
@@ -242,8 +254,10 @@ export async function ensureDatabaseSchema() {
       console.warn("Seed initial attendant note:", seedErr);
     }
 
-    schemaEnsured = true;
-  } catch (err) {
-    console.warn("ensureDatabaseSchema note:", err);
-  }
+    } catch (err) {
+      console.warn("ensureDatabaseSchema note:", err);
+    }
+  })();
+
+  return schemaPromise;
 }

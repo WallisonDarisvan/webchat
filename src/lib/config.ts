@@ -15,6 +15,7 @@ export interface PromptTag {
   description: string; // Explicação de uso
   value: string; // Texto que substitui no prompt ou ação executada
   type: "variable" | "action"; // 'variable' = substitui texto no prompt; 'action' = gatilho de controle
+  category?: "general" | "timer" | "action";
   isSystem?: boolean; // Tags nativas do sistema protegidas
 }
 
@@ -25,6 +26,7 @@ export const SYSTEM_DEFAULT_TAGS: PromptTag[] = [
     description: "Substitui automaticamente pelo nome do atendente configurado.",
     value: "Dinâmico (Nome do Atendente)",
     type: "variable",
+    category: "general",
     isSystem: true,
   },
   {
@@ -33,6 +35,7 @@ export const SYSTEM_DEFAULT_TAGS: PromptTag[] = [
     description: "Tempo máximo de conversa e suporte pós-compra após o pagamento PIX.",
     value: "Dinâmico (Minutos Pós-Venda)",
     type: "variable",
+    category: "timer",
     isSystem: true,
   },
   {
@@ -41,6 +44,7 @@ export const SYSTEM_DEFAULT_TAGS: PromptTag[] = [
     description: "Tempo limite de silêncio do cliente antes de acionar a despedida por inatividade.",
     value: "Dinâmico (Minutos Inatividade)",
     type: "variable",
+    category: "timer",
     isSystem: true,
   },
   {
@@ -49,6 +53,7 @@ export const SYSTEM_DEFAULT_TAGS: PromptTag[] = [
     description: "Tempo de bloqueio que a atendente permanece ausente até poder voltar a falar.",
     value: "Dinâmico (Horas de Cooldown)",
     type: "variable",
+    category: "timer",
     isSystem: true,
   },
   {
@@ -57,6 +62,7 @@ export const SYSTEM_DEFAULT_TAGS: PromptTag[] = [
     description: "Gatilho de checkout: aciona a emissão automática do card PIX com QR Code.",
     value: "Gatilho de Ação Automático",
     type: "action",
+    category: "action",
     isSystem: true,
   },
   {
@@ -65,6 +71,7 @@ export const SYSTEM_DEFAULT_TAGS: PromptTag[] = [
     description: "Gatilho de encerramento: encerra o atendimento com desculpa do namorado e ativa cooldown.",
     value: "Gatilho de Ação Automático",
     type: "action",
+    category: "action",
     isSystem: true,
   },
 ];

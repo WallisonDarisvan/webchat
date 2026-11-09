@@ -29,11 +29,16 @@ export async function POST(req: NextRequest) {
 
     // If no external AI key is set, return intelligent simulated assistant response
     if (!cfg.aiApiKey) {
-      const lastMsg = messages[messages.length - 1]?.content || "";
-      let mockReply = `Olá! Sou seu assistente de IA. Você enviou: "${lastMsg.slice(0, 80)}". Para ativar o processamento em tempo real com LLMs (como DeepSeek, OpenAI ou Groq), preencha sua API Key na aba **Provedor de IA**. Enquanto isso, estou pronto para te ajudar com ideias de copy, roteiros e ajustes de prompt!`;
+      const lastMsg = messages[messages.length - 1];
+      const lastContent = lastMsg?.content || "";
+      const hasImage = Boolean(lastMsg?.imageUrl);
+
+      let mockReply = `Olá! Sou seu assistente de IA. Você enviou: "${lastContent.slice(0, 80)}". Para ativar o processamento em tempo real com LLMs e visão computacional (como DeepSeek, OpenAI ou Gemini), preencha sua API Key na aba **Provedor de IA**.`;
       
-      if (lastMsg.toLowerCase().includes("ajuda") || lastMsg.toLowerCase().includes("ola") || lastMsg.toLowerCase().includes("oi")) {
-        mockReply = `Olá! Estou à disposição. Você pode me pedir para:\n\n1. Escrever ou refinar o prompt da sua atendente (${cfg.agentName})\n2. Criar mensagens persuasivas para quebrar objeções de clientes\n3. Simular uma conversa real de vendas para testar os gatilhos\n4. Sugerir melhorias nas mensagens de entrega e pós-venda\n\nComo posso te ajudar agora?`;
+      if (hasImage) {
+        mockReply = `Recebi sua imagem com sucesso! No modo de teste local sem chave de API externa, a leitura multimodal de imagem fica simulada. Para analisar e ler imagens reais (prints, designs, comprovantes ou produtos), insira uma chave de API com suporte a visão na aba **Provedor de IA**.`;
+      } else if (lastContent.toLowerCase().includes("ajuda") || lastContent.toLowerCase().includes("ola") || lastContent.toLowerCase().includes("oi")) {
+        mockReply = `Olá! Estou à disposição. Você pode me pedir para:\n\n1. Escrever ou refinar o prompt da sua atendente (${cfg.agentName})\n2. Analisar uma imagem ou print (basta anexar ou colar com Ctrl+V)\n3. Criar mensagens persuasivas para quebrar objeções de clientes\n4. Simular uma conversa real de vendas para testar os gatilhos\n\nComo posso te ajudar agora?`;
       }
 
       return NextResponse.json({
@@ -53,14 +58,36 @@ Informações do Atendente Atual configurado no sistema:
 - Bio: ${cfg.bio}
 - Prompt Atual da Atendente: ${cfg.systemPrompt.slice(0, 1000)}
 
-Ajude o administrador com o que ele pedir: criação de respostas, testes de atendimento, melhorias no prompt da atendente, sugestões de roteiro de vendas, ou qualquer dúvida e solicitação. Seja objetivo, prestativo e fale sempre em português do Brasil com formatação clara e agradável em markdown.`;
+Você tem capacidade de VISÃO COMPUTACIONAL e análise visual completa. Sempre que o usuário enviar uma imagem (print de tela, fotos de produtos, fotos de conversas, layout ou comprovantes), examine minuciosamente os elementos visuais, leia os textos contidos na imagem e atenda à solicitação do administrador com precisão.
+Seja objetivo, prestativo e fale sempre em português do Brasil com formatação clara e agradável em markdown.`;
 
     const apiMessages = [
       { role: "system", content: systemInstruction },
-      ...messages.slice(-12).map((m: any) => ({
-        role: m.role === "assistant" ? "assistant" : "user",
-        content: String(m.content || ""),
-      })),
+      ...messages.slice(-12).map((m: any) => {
+        const role = m.role === "assistant" ? "assistant" : "user";
+        if (role === "user" && m.imageUrl) {
+          return {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: String(m.content || "Analise a imagem anexada:"),
+              },
+              {
+                type: "image_url",
+                image_url: {
+                  url: m.imageUrl,
+                },
+              },
+            ],
+          };
+        }
+
+        return {
+          role,
+          content: String(m.content || ""),
+        };
+      }),
     ];
 
     const controller = new AbortController();
@@ -106,3 +133,4 @@ Ajude o administrador com o que ele pedir: criação de respostas, testes de ate
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
+

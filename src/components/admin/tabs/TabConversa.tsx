@@ -12,6 +12,9 @@ import {
   Check,
   RefreshCw,
   Zap,
+  Image as ImageIcon,
+  Paperclip,
+  X,
 } from "lucide-react";
 import { AdminConfig } from "../types";
 
@@ -19,6 +22,7 @@ interface MessageItem {
   id: string;
   role: "user" | "assistant";
   content: string;
+  imageUrl?: string;
   createdAt: Date;
 }
 
@@ -36,10 +40,13 @@ const QUICK_PROMPTS = [
 export function TabConversa({ config }: TabConversaProps) {
   const [messages, setMessages] = useState<MessageItem[]>([]);
   const [input, setInput] = useState("");
+  const [attachedImage, setAttachedImage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -49,20 +56,62 @@ export function TabConversa({ config }: TabConversaProps) {
     scrollToBottom();
   }, [messages, isLoading]);
 
+  // Support pasting images directly from clipboard (Ctrl+V)
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith("image/")) {
+        const file = items[i].getAsFile();
+        if (file) {
+          processImageFile(file);
+          e.preventDefault();
+          break;
+        }
+      }
+    }
+  };
+
+  const processImageFile = (file: File) => {
+    if (file.size > 8 * 1024 * 1024) {
+      alert("A imagem selecionada é muito grande. Escolha uma imagem de até 8MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (typeof event.target?.result === "string") {
+        setAttachedImage(event.target.result);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processImageFile(file);
+    }
+    e.target.value = "";
+  };
+
   const handleSend = async (textToSend?: string) => {
     const text = (textToSend || input).trim();
-    if (!text || isLoading) return;
+    if ((!text && !attachedImage) || isLoading) return;
 
+    const currentImg = attachedImage;
     const userMsg: MessageItem = {
       id: "usr_" + Date.now(),
       role: "user",
-      content: text,
+      content: text || (currentImg ? "Analise a imagem enviada:" : ""),
+      imageUrl: currentImg || undefined,
       createdAt: new Date(),
     };
 
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
     setInput("");
+    setAttachedImage(null);
     setIsLoading(true);
 
     try {
@@ -73,6 +122,7 @@ export function TabConversa({ config }: TabConversaProps) {
           messages: newMessages.map((m) => ({
             role: m.role,
             content: m.content,
+            imageUrl: m.imageUrl,
           })),
           attendantId: config.id || config.slug,
         }),
@@ -123,6 +173,7 @@ export function TabConversa({ config }: TabConversaProps) {
     if (messages.length === 0) return;
     if (confirm("Deseja realmente limpar toda a conversa atual?")) {
       setMessages([]);
+      setAttachedImage(null);
     }
   };
 
@@ -143,9 +194,13 @@ export function TabConversa({ config }: TabConversaProps) {
                   <Sparkles className="w-2.5 h-2.5" />
                   <span>{config.aiModel || "deepseek-chat"}</span>
                 </span>
+                <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#202c33] text-[#8696a0] border border-[#26353d]">
+                  <ImageIcon className="w-2.5 h-2.5 text-emerald-400" />
+                  <span>Visão / Imagens Ativa</span>
+                </span>
               </div>
               <p className="text-[11px] text-[#8696a0]">
-                Peça ideias, gere respostas ou faça testes com a IA usando o contexto de {config.agentName}
+                Peça ideias, anexe fotos ou faça testes com a IA usando o contexto de {config.agentName}
               </p>
             </div>
           </div>
@@ -175,8 +230,8 @@ export function TabConversa({ config }: TabConversaProps) {
               <div>
                 <h3 className="text-base font-bold text-white">Como posso ajudar você hoje?</h3>
                 <p className="text-xs text-[#8696a0] mt-1 leading-relaxed">
-                  Este é o seu espaço direto de criação. Peça roteiros, teste argumentos de venda,
-                  refine o prompt da atendente ou simule conversas com clientes em tempo real.
+                  Envie instruções, anexe prints e imagens (ou use <kbd className="bg-[#182229] px-1 py-0.5 rounded border border-[#26353d] text-white">Ctrl+V</kbd>)
+                  para que a IA leia e atenda suas solicitações com visão em tempo real.
                 </p>
               </div>
 
@@ -215,6 +270,17 @@ export function TabConversa({ config }: TabConversaProps) {
                         : "bg-[#182229] text-[#e9edef] border border-[#26353d] rounded-bl-none shadow-md"
                     }`}
                   >
+                    {/* Imagem enviada pelo usuário */}
+                    {msg.imageUrl && (
+                      <div className="mb-2.5 rounded-xl overflow-hidden max-w-xs border border-white/20 bg-black/40 shadow-md">
+                        <img
+                          src={msg.imageUrl}
+                          alt="Imagem enviada"
+                          className="w-full h-auto max-h-64 object-contain"
+                        />
+                      </div>
+                    )}
+
                     <div className="whitespace-pre-wrap break-words">{msg.content}</div>
 
                     {msg.role === "assistant" && (
@@ -257,7 +323,7 @@ export function TabConversa({ config }: TabConversaProps) {
                   </div>
                   <div className="bg-[#182229] border border-[#26353d] rounded-2xl rounded-bl-none px-4 py-3 text-xs text-[#8696a0] flex items-center gap-2">
                     <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    <span>Pensando e gerando resposta...</span>
+                    <span>Lendo dados e gerando resposta...</span>
                   </div>
                 </div>
               )}
@@ -266,8 +332,33 @@ export function TabConversa({ config }: TabConversaProps) {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Rodapé com Campo de Digitação */}
+        {/* Rodapé com Campo de Digitação e Upload */}
         <div className="p-3 sm:p-4 border-t border-[#222e35] bg-[#182229]/50">
+          {/* Miniatura da Imagem Anexada */}
+          {attachedImage && (
+            <div className="mb-2 inline-flex items-center gap-2 bg-[#202c33] border border-emerald-500/40 rounded-xl p-1.5 pr-3 shadow-md animate-in fade-in">
+              <div className="w-10 h-10 rounded-lg overflow-hidden bg-black/40 border border-white/10 shrink-0">
+                <img
+                  src={attachedImage}
+                  alt="Pré-visualização"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="text-left">
+                <span className="text-xs font-medium text-emerald-400 block">Imagem anexada</span>
+                <span className="text-[10px] text-[#8696a0]">Pronta para envio</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAttachedImage(null)}
+                className="ml-2 p-1 text-[#8696a0] hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
+                title="Remover imagem"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -275,20 +366,40 @@ export function TabConversa({ config }: TabConversaProps) {
             }}
             className="flex items-end gap-2 bg-[#202c33] border border-[#26353d] focus-within:border-emerald-500 rounded-xl p-2 transition-all shadow-inner"
           >
+            {/* Input oculto para carregar arquivo */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFileChange}
+              className="hidden"
+            />
+
+            {/* Botão de Anexo / Imagem */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="p-2 rounded-lg text-[#8696a0] hover:text-emerald-400 hover:bg-[#182229] transition-colors shrink-0 cursor-pointer"
+              title="Anexar imagem (ou cole com Ctrl+V)"
+            >
+              <Paperclip className="w-4 h-4" />
+            </button>
+
             <textarea
               ref={textareaRef}
               rows={1}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Digite o que deseja pedir para a IA... (ex: 'Crie uma mensagem persuasiva')"
+              onPaste={handlePaste}
+              placeholder="Digite sua solicitação ou cole uma imagem (Ctrl+V)..."
               disabled={isLoading}
               className="flex-1 bg-transparent text-white placeholder-[#8696a0] text-xs sm:text-sm px-2 py-1 outline-none resize-none max-h-32 min-h-[36px]"
             />
 
             <button
               type="submit"
-              disabled={!input.trim() || isLoading}
+              disabled={(!input.trim() && !attachedImage) || isLoading}
               className="p-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-all shadow-md shadow-emerald-950 shrink-0 cursor-pointer"
               title="Enviar mensagem (Enter)"
             >
@@ -296,9 +407,10 @@ export function TabConversa({ config }: TabConversaProps) {
             </button>
           </form>
 
-          <p className="text-[10px] text-[#8696a0] text-center mt-2">
-            Pressione <kbd className="bg-[#182229] px-1 py-0.5 rounded border border-[#26353d]">Enter</kbd> para enviar • <kbd className="bg-[#182229] px-1 py-0.5 rounded border border-[#26353d]">Shift + Enter</kbd> para nova linha
-          </p>
+          <div className="flex items-center justify-between text-[10px] text-[#8696a0] mt-2 px-1">
+            <span>Dica: cole capturas de tela diretamente com <kbd className="bg-[#182229] px-1 py-0.5 rounded border border-[#26353d]">Ctrl + V</kbd></span>
+            <span><kbd className="bg-[#182229] px-1 py-0.5 rounded border border-[#26353d]">Enter</kbd> envia • <kbd className="bg-[#182229] px-1 py-0.5 rounded border border-[#26353d]">Shift + Enter</kbd> quebra linha</span>
+          </div>
         </div>
       </div>
     </div>

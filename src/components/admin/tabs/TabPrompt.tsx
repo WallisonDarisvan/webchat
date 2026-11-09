@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
-import { FileText, RefreshCw, Zap, Clock, Tag, Eye, Edit3, Sparkles } from "lucide-react";
+import React, { useState, useRef, useMemo, useEffect } from "react";
+import { FileText, RefreshCw, Zap, Clock, Tag, Eye, EyeOff, Sparkles, CheckCircle2 } from "lucide-react";
 import { AdminConfig, AdminTabType } from "../types";
 import { PromptTag, DEFAULT_SYSTEM_PROMPT } from "@/lib/config";
 
@@ -18,23 +18,28 @@ export function TabPrompt({
   allTags,
   onNavigateTab,
 }: TabPromptProps) {
-  const [viewMode, setViewMode] = useState<"edit" | "preview">("edit");
+  const [highlightEnabled, setHighlightEnabled] = useState(true);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
 
-  // Identify all tags present in the prompt with their occurrences
-  const detectedTags = useMemo(() => {
-    const matches = config.systemPrompt.match(/\[[A-Z0-9_\-:]+\]/g) || [];
-    const counts: Record<string, number> = {};
-    matches.forEach((t) => {
-      counts[t] = (counts[t] || 0) + 1;
-    });
-    return Object.entries(counts).map(([tag, count]) => ({ tag, count }));
+  // Synchronize scroll between textarea and the backdrop highlighting layer
+  const handleScroll = (e: React.UIEvent<HTMLTextAreaElement>) => {
+    if (backdropRef.current) {
+      backdropRef.current.scrollTop = e.currentTarget.scrollTop;
+      backdropRef.current.scrollLeft = e.currentTarget.scrollLeft;
+    }
+  };
+
+  // Keep backdrop scroll in sync on external updates or text changes
+  useEffect(() => {
+    if (textareaRef.current && backdropRef.current) {
+      backdropRef.current.scrollTop = textareaRef.current.scrollTop;
+      backdropRef.current.scrollLeft = textareaRef.current.scrollLeft;
+    }
   }, [config.systemPrompt]);
 
   const insertTagIntoPrompt = (tagName: string) => {
-    if (viewMode === "preview") {
-      setViewMode("edit");
-    }
-    const textarea = document.getElementById("systemPromptTextarea") as HTMLTextAreaElement;
+    const textarea = textareaRef.current || (document.getElementById("systemPromptTextarea") as HTMLTextAreaElement);
     if (textarea) {
       const start = textarea.selectionStart || 0;
       const end = textarea.selectionEnd || 0;
@@ -44,55 +49,80 @@ export function TabPrompt({
       setTimeout(() => {
         textarea.focus();
         textarea.setSelectionRange(start + tagName.length, start + tagName.length);
+        if (backdropRef.current) {
+          backdropRef.current.scrollTop = textarea.scrollTop;
+        }
       }, 50);
     } else {
       setConfig({ ...config, systemPrompt: config.systemPrompt + " " + tagName });
     }
   };
 
-  const getTagBadgeStyle = (tag: string) => {
-    if (tag.startsWith("[TEMPO-")) {
-      return "bg-amber-500/20 text-amber-300 border-amber-500/40";
-    }
-    if (tag.startsWith("[ENVIAR_MIDIA")) {
-      return "bg-purple-500/20 text-purple-300 border-purple-500/40";
+  // Find all distinct tags present in the current prompt text
+  const detectedTags = useMemo(() => {
+    const matches = config.systemPrompt.match(/\[[A-Za-z0-9_\-:]+\]/g) || [];
+    return Array.from(new Set(matches));
+  }, [config.systemPrompt]);
+
+  // Helper to categorize tag and get appropriate badge theme
+  const getTagStyle = (tag: string) => {
+    const upper = tag.toUpperCase();
+    if (
+      upper.includes("TEMPO") ||
+      upper.includes("TIMER") ||
+      upper.includes("COOLDOWN") ||
+      upper.includes("INATIVIDADE")
+    ) {
+      return {
+        badgeClasses: "bg-cyan-500/25 text-cyan-300 ring-1 ring-cyan-500/50 shadow-[0_0_8px_rgba(6,182,212,0.25)]",
+        pillClasses: "bg-cyan-500/15 border-cyan-500/30 text-cyan-300",
+        type: "Timer",
+      };
     }
     if (
-      tag === "[CLIENTE]" ||
-      tag === "[ATENDENTE]" ||
-      tag === "[PRODUTO]" ||
-      tag === "[PRECO]" ||
-      tag === "[PIX]" ||
-      tag === "[LINK_ENTREGA]"
+      upper.includes("GERAR_PAGAMENTO") ||
+      upper.includes("ENCERRAR") ||
+      upper.includes("FINALIZAR") ||
+      upper.includes("ENVIAR_MIDIA") ||
+      upper.includes("DISPARAR")
     ) {
-      return "bg-cyan-500/20 text-cyan-300 border-cyan-500/40";
+      return {
+        badgeClasses: "bg-amber-500/25 text-amber-300 ring-1 ring-amber-500/50 shadow-[0_0_8px_rgba(245,158,11,0.25)]",
+        pillClasses: "bg-amber-500/15 border-amber-500/30 text-amber-300",
+        type: "Ação",
+      };
     }
-    if (
-      tag === "[GERAR_PAGAMENTO]" ||
-      tag === "[ENCERRAR_CONVERSA]" ||
-      tag === "[FINALIZAR_CONVERSA]"
-    ) {
-      return "bg-emerald-500/25 text-emerald-300 border-emerald-500/50 font-semibold";
-    }
-    return "bg-sky-500/20 text-sky-300 border-sky-500/30";
+    return {
+      badgeClasses: "bg-emerald-500/25 text-emerald-300 ring-1 ring-emerald-500/50 shadow-[0_0_8px_rgba(16,185,129,0.25)]",
+      pillClasses: "bg-emerald-500/15 border-emerald-500/30 text-emerald-300",
+      type: "Variável",
+    };
   };
 
-  const renderHighlightedText = (text: string) => {
-    const parts = text.split(/(\[[A-Z0-9_\-:]+\])/g);
+  // Renders the highlighted backdrop text with tags distinctly badged
+  const renderHighlightedContent = (text: string) => {
+    if (!text) return null;
+    const TAG_REGEX = /(\[[A-Za-z0-9_\-:]+\])/g;
+    const parts = text.split(TAG_REGEX);
+
     return parts.map((part, index) => {
-      if (/^\[[A-Z0-9_\-:]+\]$/.test(part)) {
+      if (TAG_REGEX.test(part)) {
+        const { badgeClasses } = getTagStyle(part);
         return (
           <span
             key={index}
-            className={`inline-block px-1.5 py-0.5 mx-0.5 rounded border font-mono font-bold text-xs ${getTagBadgeStyle(
-              part
-            )}`}
+            className={`font-semibold rounded px-1 -mx-0.5 inline ${badgeClasses}`}
           >
             {part}
           </span>
         );
       }
-      return <span key={index}>{part}</span>;
+
+      return (
+        <span key={index} className="text-[#e9edef]">
+          {part}
+        </span>
+      );
     });
   };
 
@@ -113,7 +143,7 @@ export function TabPrompt({
           <button
             type="button"
             onClick={() => setConfig({ ...config, systemPrompt: DEFAULT_SYSTEM_PROMPT })}
-            className="text-xs text-[#8696a0] hover:text-emerald-400 transition-colors flex items-center gap-1"
+            className="text-xs text-[#8696a0] hover:text-emerald-400 transition-colors flex items-center gap-1 cursor-pointer"
           >
             <RefreshCw className="w-3 h-3" />
             <span>Restaurar Padrão</span>
@@ -134,48 +164,26 @@ export function TabPrompt({
           </p>
         </div>
 
-        <div className="space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
             <div>
-              <label className="block text-xs font-semibold text-white">
-                Prompt de Sistema Completo
-              </label>
-              <p className="text-[11px] text-[#8696a0]">
-                Clique nas tags abaixo para inseri-las ou alterne para o modo de destaque visual.
+              <div className="flex items-center gap-2">
+                <label className="block text-xs font-semibold text-white">
+                  Prompt de Sistema Completo
+                </label>
+                {detectedTags.length > 0 && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    <Sparkles className="w-2.5 h-2.5" />
+                    <span>{detectedTags.length} {detectedTags.length === 1 ? "tag ativa" : "tags ativas"}</span>
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-[#8696a0] mt-0.5">
+                Clique nas tags abaixo para inseri-las diretamente no texto do prompt.
               </p>
             </div>
 
             <div className="flex items-center gap-1.5 flex-wrap">
-              {/* View / Edit Mode Switcher */}
-              <div className="flex items-center bg-[#172228] p-0.5 rounded-lg border border-[#222e35] mr-1">
-                <button
-                  type="button"
-                  onClick={() => setViewMode("edit")}
-                  className={`px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors ${
-                    viewMode === "edit"
-                      ? "bg-emerald-500 text-black font-semibold shadow-sm"
-                      : "text-[#8696a0] hover:text-white"
-                  }`}
-                  title="Modo de edição do texto"
-                >
-                  <Edit3 className="w-3.5 h-3.5" />
-                  <span>Editar</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode("preview")}
-                  className={`px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors ${
-                    viewMode === "preview"
-                      ? "bg-emerald-500 text-black font-semibold shadow-sm"
-                      : "text-[#8696a0] hover:text-white"
-                  }`}
-                  title="Visualizar prompt com todas as tags destacadas"
-                >
-                  <Eye className="w-3.5 h-3.5" />
-                  <span>Destaque de Tags</span>
-                </button>
-              </div>
-
               {allTags
                 .filter((t) => t.type === "variable")
                 .map((tag) => (
@@ -209,66 +217,89 @@ export function TabPrompt({
                 <Tag className="w-3 h-3 text-emerald-400" />
                 <span>Gerenciar Tags</span>
               </button>
-            </div>
-          </div>
 
-          {/* Real-time Detected Tags Bar */}
-          <div className="p-3 bg-[#172228] border border-[#222e35] rounded-xl flex items-center justify-between gap-3 flex-wrap">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs text-[#8696a0] font-medium flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                <span>
-                  Tags identificadas no prompt ({detectedTags.reduce((acc, t) => acc + t.count, 0)}):
-                </span>
-              </span>
-              {detectedTags.length === 0 ? (
-                <span className="text-xs text-[#53656f] italic">Nenhuma tag no texto</span>
-              ) : (
-                detectedTags.map(({ tag, count }) => (
-                  <span
-                    key={tag}
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border font-mono text-[11px] ${getTagBadgeStyle(
-                      tag
-                    )}`}
-                  >
-                    <span>{tag}</span>
-                    {count > 1 && <span className="opacity-70 text-[10px]">×{count}</span>}
-                  </span>
-                ))
-              )}
-            </div>
-
-            {viewMode === "preview" && (
               <button
                 type="button"
-                onClick={() => setViewMode("edit")}
-                className="text-xs text-emerald-400 hover:underline flex items-center gap-1"
+                onClick={() => setHighlightEnabled(!highlightEnabled)}
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
+                  highlightEnabled
+                    ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25"
+                    : "bg-[#202c33] border-[#26353d] text-[#8696a0] hover:text-white"
+                }`}
+                title={highlightEnabled ? "Desativar destaque visual de tags" : "Ativar destaque visual de tags"}
               >
-                <Edit3 className="w-3 h-3" />
-                <span>Alternar para edição</span>
+                {highlightEnabled ? (
+                  <>
+                    <Eye className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Destaque Ativo</span>
+                  </>
+                ) : (
+                  <>
+                    <EyeOff className="w-3.5 h-3.5 text-[#8696a0]" />
+                    <span>Destaque Desativado</span>
+                  </>
+                )}
               </button>
-            )}
+            </div>
           </div>
 
-          {/* Editor or Highlighted View */}
-          {viewMode === "edit" ? (
-            <textarea
-              id="systemPromptTextarea"
-              rows={16}
-              value={config.systemPrompt}
-              onChange={(e) => setConfig({ ...config, systemPrompt: e.target.value })}
-              className="w-full px-4 py-3 bg-[#202c33] border border-[#222e35] focus:border-emerald-500 rounded-xl text-xs sm:text-sm text-white font-mono leading-relaxed outline-none resize-y"
-              placeholder="Digite o System Prompt e utilize tags como [CLIENTE], [PRODUTO], [GERAR_PAGAMENTO]..."
-            />
-          ) : (
-            <div
-              onClick={() => setViewMode("edit")}
-              title="Clique em qualquer lugar para editar o prompt"
-              className="w-full min-h-[380px] max-h-[550px] overflow-y-auto px-4 py-3 bg-[#202c33] border border-emerald-500/40 rounded-xl text-xs sm:text-sm text-gray-200 font-mono leading-relaxed whitespace-pre-wrap select-text cursor-text shadow-inner"
-            >
-              {renderHighlightedText(config.systemPrompt)}
+          {/* List of active detected tags in the current prompt */}
+          {detectedTags.length > 0 && (
+            <div className="flex items-center gap-1.5 flex-wrap mb-2.5 p-2 bg-[#182229] border border-[#222e35] rounded-xl text-xs">
+              <span className="text-[11px] font-semibold text-[#8696a0] flex items-center gap-1 mr-1">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                Tags Detectadas no Prompt:
+              </span>
+              {detectedTags.map((t) => {
+                const { pillClasses } = getTagStyle(t);
+                return (
+                  <span
+                    key={t}
+                    className={`font-mono text-[11px] px-2 py-0.5 rounded-md border font-medium ${pillClasses}`}
+                  >
+                    {t}
+                  </span>
+                );
+              })}
             </div>
           )}
+
+          {/* Prompt Editor with Live Tag Syntax Highlighting */}
+          <div className="relative w-full rounded-xl border border-[#222e35] focus-within:border-emerald-500 bg-[#202c33] overflow-hidden shadow-inner">
+            {highlightEnabled && (
+              <div
+                ref={backdropRef}
+                className="absolute inset-0 p-4 font-mono text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words pointer-events-none select-none overflow-y-scroll text-transparent [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:bg-transparent"
+                aria-hidden="true"
+              >
+                {renderHighlightedContent(
+                  config.systemPrompt.endsWith("\n")
+                    ? config.systemPrompt + " "
+                    : config.systemPrompt
+                )}
+              </div>
+            )}
+
+            <textarea
+              ref={textareaRef}
+              id="systemPromptTextarea"
+              rows={18}
+              value={config.systemPrompt}
+              onChange={(e) => {
+                setConfig({ ...config, systemPrompt: e.target.value });
+                if (backdropRef.current) {
+                  backdropRef.current.scrollTop = e.target.scrollTop;
+                }
+              }}
+              onScroll={handleScroll}
+              className={`w-full p-4 font-mono text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words outline-none resize-y min-h-[420px] transition-colors relative z-10 ${
+                highlightEnabled
+                  ? "bg-transparent text-transparent caret-emerald-400 selection:bg-emerald-500/35 selection:text-white"
+                  : "bg-transparent text-[#e9edef] caret-emerald-400 selection:bg-emerald-500/30 selection:text-white"
+              }`}
+              placeholder="Digite aqui as instruções e prompt de sistema..."
+            />
+          </div>
         </div>
       </div>
     </div>

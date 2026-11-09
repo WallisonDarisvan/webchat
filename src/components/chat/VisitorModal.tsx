@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
-import { MessageSquare, ArrowRight, ShieldCheck, Sparkles } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { ArrowRight, ShieldCheck } from "lucide-react";
 
 interface VisitorModalProps {
   isOpen: boolean;
@@ -20,6 +20,29 @@ export function VisitorModal({
 }: VisitorModalProps) {
   const [name, setName] = useState("");
   const [imgRatio, setImgRatio] = useState<string>("3 / 4");
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Detect mobile virtual keyboard via VisualViewport API
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.visualViewport) return;
+
+    const vv = window.visualViewport;
+    const handleViewportChange = () => {
+      if (!vv) return;
+      const heightDifference = window.innerHeight - vv.height;
+      setIsKeyboardOpen(heightDifference > 120);
+    };
+
+    vv.addEventListener("resize", handleViewportChange);
+    vv.addEventListener("scroll", handleViewportChange);
+
+    return () => {
+      vv.removeEventListener("resize", handleViewportChange);
+      vv.removeEventListener("scroll", handleViewportChange);
+    };
+  }, []);
 
   if (!isOpen) return null;
 
@@ -38,15 +61,26 @@ export function VisitorModal({
     .join("")
     .toUpperCase() || "GS";
 
+  const isKeyboardActive = isKeyboardOpen || isFocused;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
-      <div className="w-full max-w-sm bg-[#111b21] border border-[#222e35] rounded-2xl shadow-2xl overflow-hidden text-center relative max-h-[92vh] flex flex-col overflow-y-auto">
-        {/* Capa com altura proporcional à imagem real */}
+    <div
+      className={`fixed inset-0 z-50 flex justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md transition-all duration-300 ${
+        isKeyboardActive ? "items-end pb-3" : "items-center"
+      }`}
+    >
+      <div
+        className={`w-full max-w-sm bg-[#111b21] border border-[#222e35] rounded-2xl shadow-2xl overflow-hidden text-center relative max-h-[95dvh] flex flex-col overflow-y-auto transition-all duration-300 ${
+          isKeyboardActive ? "scale-[0.98] sm:scale-100" : ""
+        }`}
+      >
+        {/* Capa com altura proporcional e recolhimento inteligente quando o teclado abre */}
         <div
-          className="relative w-full overflow-hidden bg-[#182229] shrink-0 transition-all duration-300"
+          className="relative w-full overflow-hidden bg-[#182229] shrink-0 transition-all duration-300 ease-out"
           style={{
-            aspectRatio: imgRatio,
-            maxHeight: "56vh",
+            aspectRatio: isKeyboardActive ? undefined : imgRatio,
+            maxHeight: isKeyboardActive ? "16vh" : "56vh",
+            height: isKeyboardActive ? "16vh" : undefined,
           }}
         >
           {agentAvatar ? (
@@ -59,10 +93,10 @@ export function VisitorModal({
                   setImgRatio(`${img.naturalWidth} / ${img.naturalHeight}`);
                 }
               }}
-              className="w-full h-full object-cover object-top"
+              className="w-full h-full object-cover object-top transition-all duration-300"
             />
           ) : (
-            <div className="w-full h-full bg-gradient-to-tr from-emerald-950 via-[#182229] to-[#111b21] flex items-center justify-center min-h-[300px]">
+            <div className="w-full h-full bg-gradient-to-tr from-emerald-950 via-[#182229] to-[#111b21] flex items-center justify-center min-h-[120px]">
               <span className="text-4xl font-bold text-emerald-400/40">{initials}</span>
             </div>
           )}
@@ -79,8 +113,8 @@ export function VisitorModal({
           </div>
         </div>
 
-        {/* Conteúdo com textos diminuídos e diretos */}
-        <div className="pt-4 pb-5 px-5 sm:px-6 space-y-3">
+        {/* Formulário posicionado com prioridade acima do teclado */}
+        <div className="pt-3 pb-4 px-5 sm:px-6 space-y-2.5 transition-all duration-300">
           <div>
             <h2 className="text-base sm:text-lg font-semibold text-white tracking-tight">
               Como posso te chamar?
@@ -90,13 +124,23 @@ export function VisitorModal({
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-3 pt-1">
+          <form onSubmit={handleSubmit} className="space-y-2.5 pt-1">
             <div className="relative">
               <input
+                ref={inputRef}
                 type="text"
                 placeholder="Digite seu nome..."
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                onFocus={() => {
+                  setIsFocused(true);
+                  setTimeout(() => {
+                    inputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+                  }, 120);
+                }}
+                onBlur={() => {
+                  setIsFocused(false);
+                }}
                 disabled={isLoading}
                 required
                 autoFocus
@@ -107,7 +151,7 @@ export function VisitorModal({
             <button
               type="submit"
               disabled={!name.trim() || isLoading}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium text-xs sm:text-sm rounded-xl transition-all duration-200 shadow-md shadow-emerald-950"
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium text-xs sm:text-sm rounded-xl transition-all duration-200 shadow-md shadow-emerald-950 cursor-pointer"
             >
               {isLoading ? (
                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -120,7 +164,7 @@ export function VisitorModal({
             </button>
           </form>
 
-          <div className="flex items-center justify-center gap-1.5 text-[11px] text-[#8696a0] pt-1">
+          <div className="flex items-center justify-center gap-1.5 text-[11px] text-[#8696a0] pt-0.5">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
             <span>Atendimento em tempo real</span>
           </div>

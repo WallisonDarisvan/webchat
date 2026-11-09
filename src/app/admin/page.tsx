@@ -537,6 +537,14 @@ export default function AdminPage() {
   };
 
   // Tags CRUD Handlers
+  const getTagDisplayValue = (tag: PromptTag) => {
+    if (tag.id === "tag_nome") return config.agentName || "Gabriel Siqueira";
+    if (tag.id === "tag_tempo_pos_venda") return `${config.postPurchaseMinutes ?? 10} minutos`;
+    if (tag.id === "tag_tempo_inatividade") return `${config.nonPurchaseMinutes ?? 15} minutos`;
+    if (tag.id === "tag_tempo_cooldown") return `${config.cooldownHours ?? 24} horas`;
+    return tag.value;
+  };
+
   const handleOpenNewTagModal = () => {
     setEditingTag(null);
     setTagNameInput("");
@@ -1369,9 +1377,14 @@ export default function AdminPage() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-[#8696a0] mb-1">
-                      Tempo Pós-Venda (Comprou)
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-medium text-[#8696a0]">
+                        Tempo Pós-Venda (Comprou)
+                      </label>
+                      <span className="font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.2 rounded text-[10px] border border-emerald-500/20">
+                        [TEMPO-POS-VENDA]
+                      </span>
+                    </div>
                     <div className="flex items-center gap-2">
                       <input
                         type="number"
@@ -1394,9 +1407,14 @@ export default function AdminPage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-[#8696a0] mb-1">
-                      Tempo de Inatividade
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-medium text-[#8696a0]">
+                        Tempo de Inatividade
+                      </label>
+                      <span className="font-mono text-teal-400 bg-teal-500/10 px-1.5 py-0.2 rounded text-[10px] border border-teal-500/20">
+                        [TEMPO-INATIVIDADE]
+                      </span>
+                    </div>
                     <div className="flex items-center gap-2">
                       <input
                         type="number"
@@ -1419,9 +1437,14 @@ export default function AdminPage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-[#8696a0] mb-1">
-                      Bloqueio / Cooldown
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-medium text-[#8696a0]">
+                        Bloqueio / Cooldown
+                      </label>
+                      <span className="font-mono text-sky-400 bg-sky-500/10 px-1.5 py-0.2 rounded text-[10px] border border-sky-500/20">
+                        [TEMPO-COOLDOWN]
+                      </span>
+                    </div>
                     <div className="flex items-center gap-2">
                       <input
                         type="number"
@@ -1449,14 +1472,10 @@ export default function AdminPage() {
                     • <strong>3 Gatilhos Inteligentes:</strong> O atendimento sem compra só é encerrado se o cliente sumir por inatividade, se recusar expressamente a compra, ou se demorar mais de 5 minutos para pagar o PIX gerado. Conversas ativas nunca são cortadas!
                   </p>
                   <p>
-                    • <strong>Tag [TEMPO]:</strong> Substituída automaticamente por{" "}
-                    <code className="text-teal-400 font-mono">
-                      {config.postPurchaseMinutes ?? 10} minutos
-                    </code>{" "}
-                    no prompt da IA.
+                    • <strong>Tags Dinâmicas Disponíveis:</strong> Insira <code className="text-emerald-400 font-mono">[TEMPO-POS-VENDA]</code> ({config.postPurchaseMinutes ?? 10} min), <code className="text-teal-400 font-mono">[TEMPO-INATIVIDADE]</code> ({config.nonPurchaseMinutes ?? 15} min) e <code className="text-sky-400 font-mono">[TEMPO-COOLDOWN]</code> ({config.cooldownHours ?? 24}h) diretamente no Prompt de Sistema.
                   </p>
                   <p>
-                    • <strong>Retorno no Dia Seguinte:</strong> Após o período de bloqueio (24h), quando o cliente mandar mensagem, o backend injeta a instrução secreta apropriada (se comprou: pergunta se gostou das fotinhas; se não comprou: volta a provocar e tenta fechar a venda).
+                    • <strong>Retorno no Dia Seguinte:</strong> Após o período de bloqueio, quando o cliente mandar mensagem, o backend injeta a instrução secreta apropriada.
                   </p>
                 </div>
               </div>
@@ -1602,10 +1621,12 @@ export default function AdminPage() {
                 .filter((t) => {
                   if (!tagSearchQuery.trim()) return true;
                   const q = tagSearchQuery.toLowerCase();
+                  const displayVal = getTagDisplayValue(t).toLowerCase();
                   return (
                     t.name.toLowerCase().includes(q) ||
                     t.description.toLowerCase().includes(q) ||
-                    t.value.toLowerCase().includes(q)
+                    t.value.toLowerCase().includes(q) ||
+                    displayVal.includes(q)
                   );
                 })
                 .map((tag) => (
@@ -1653,7 +1674,7 @@ export default function AdminPage() {
                           {tag.type === "action" ? "Comportamento da Ação:" : "Substituição no Prompt:"}
                         </span>
                         <code className="text-xs text-white font-mono break-all block">
-                          {tag.value || "—"}
+                          {getTagDisplayValue(tag) || "—"}
                         </code>
                       </div>
                     </div>

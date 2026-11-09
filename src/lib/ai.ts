@@ -80,12 +80,18 @@ ${mediaCatalogItems
         .join("\n")}`;
   }
 
-  // Replace [NOME] and [TEMPO] variables
+  // Replace standard dynamic time & name variables
   const effectiveAgentName = config.agentName || "Gabriel Siqueira";
   const postPurchaseTimeStr = `${config.postPurchaseMinutes || 10} minutos`;
+  const nonPurchaseTimeStr = `${config.nonPurchaseMinutes || 15} minutos`;
+  const cooldownTimeStr = `${config.cooldownHours || 24} horas`;
+
   let processedPrompt = config.systemPrompt
-    .replace(/\[NOME\]/g, effectiveAgentName)
-    .replace(/\[TEMPO\]/g, postPurchaseTimeStr);
+    .replace(/\[NOME\]/gi, effectiveAgentName)
+    .replace(/\[TEMPO[-_]POS[-_]VENDA\]/gi, postPurchaseTimeStr)
+    .replace(/\[TEMPO[-_]INATIVIDADE\]/gi, nonPurchaseTimeStr)
+    .replace(/\[TEMPO[-_]COOLDOWN\]/gi, cooldownTimeStr)
+    .replace(/\[TEMPO\]/gi, postPurchaseTimeStr);
 
   // Replace any custom configured tags
   try {

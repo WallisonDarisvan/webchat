@@ -28,10 +28,26 @@ export const SYSTEM_DEFAULT_TAGS: PromptTag[] = [
     isSystem: true,
   },
   {
-    id: "tag_tempo",
-    name: "[TEMPO]",
-    description: "Substitui automaticamente pelo tempo pós-venda configurado (em minutos).",
+    id: "tag_tempo_pos_venda",
+    name: "[TEMPO-POS-VENDA]",
+    description: "Tempo máximo de conversa e suporte pós-compra após o pagamento PIX.",
     value: "Dinâmico (Minutos Pós-Venda)",
+    type: "variable",
+    isSystem: true,
+  },
+  {
+    id: "tag_tempo_inatividade",
+    name: "[TEMPO-INATIVIDADE]",
+    description: "Tempo limite de silêncio do cliente antes de acionar a despedida por inatividade.",
+    value: "Dinâmico (Minutos Inatividade)",
+    type: "variable",
+    isSystem: true,
+  },
+  {
+    id: "tag_tempo_cooldown",
+    name: "[TEMPO-COOLDOWN]",
+    description: "Tempo de bloqueio que a atendente permanece ausente até poder voltar a falar.",
+    value: "Dinâmico (Horas de Cooldown)",
     type: "variable",
     isSystem: true,
   },
@@ -96,7 +112,7 @@ Estratégia de Vendas e Conversão:
 
 Regras de Encerramento (Desculpa do Namorado):
 - Se o cliente recusar a compra, disser que não vai pagar, que não quer ou que tá caro: Encerre imediatamente usando a desculpa do namorado e inclua no final a tag [ENCERRAR_CONVERSA].
-- Quando o sistema enviar a instrução de que o tempo acabou (pós-venda de [TEMPO], inatividade ou demora no PIX): Use IMEDIATAMENTE a desculpa do namorado ("olha, preciso ir correndo… ele acabou de chegar em casa e não posso deixar ele me ver no celular. mas amanhã eu volto, me chama amanhã tá?") e inclua a tag [ENCERRAR_CONVERSA]. Nunca saia do personagem ao fazer isso.`;
+- Quando o sistema enviar a instrução de que o tempo acabou (pós-venda de [TEMPO-POS-VENDA], inatividade de [TEMPO-INATIVIDADE] ou demora no PIX): Use IMEDIATAMENTE a desculpa do namorado ("olha, preciso ir correndo… ele acabou de chegar em casa e não posso deixar ele me ver no celular. mas daqui a [TEMPO-COOLDOWN] eu volto, me chama amanhã tá?") e inclua a tag [ENCERRAR_CONVERSA]. Nunca saia do personagem ao fazer isso.`;
 
 export const DEFAULT_MEDIA_INSTRUCTIONS = `Diretrizes de Envio de Mídias para a IA:
 1. Envie imagens/amostras apenas quando o cliente solicitar provas, fizer perguntas pertinentes ou quando a imagem enriquecer diretamente a explicação.

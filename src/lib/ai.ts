@@ -212,6 +212,7 @@ Informações do atendente, visitante e contexto atual:
         enable_thinking: false,
         reasoning: {
           enabled: false,
+          max_tokens: 0,
         },
       }),
       signal: controller.signal,

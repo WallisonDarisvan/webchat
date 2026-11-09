@@ -323,7 +323,7 @@ export function TabConversa({ config }: TabConversaProps) {
                   </div>
                   <div className="bg-[#182229] border border-[#26353d] rounded-2xl rounded-bl-none px-4 py-3 text-xs text-[#8696a0] flex items-center gap-2">
                     <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    <span>Lendo dados e gerando resposta...</span>
+                    <span>Gerando resposta...</span>
                   </div>
                 </div>
               )}

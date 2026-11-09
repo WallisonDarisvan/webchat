@@ -93,18 +93,25 @@ Responda sempre em português do Brasil com formatação limpa e agradável em M
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 20000);
 
+    const requestPayload = {
+      model: cfg.aiModel || "deepseek-chat",
+      messages: apiMessages,
+      temperature: cfg.aiTemperature ?? 0.7,
+      max_tokens: 1500,
+      enable_thinking: false,
+      reasoning: {
+        enabled: false,
+        max_tokens: 0,
+      },
+    };
+
     const response = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${cfg.aiApiKey}`,
       },
-      body: JSON.stringify({
-        model: cfg.aiModel || "deepseek-chat",
-        messages: apiMessages,
-        temperature: cfg.aiTemperature ?? 0.7,
-        max_tokens: 1500,
-      }),
+      body: JSON.stringify(requestPayload),
       signal: controller.signal,
     });
 

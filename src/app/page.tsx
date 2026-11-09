@@ -114,69 +114,77 @@ export default function AttendantsLobbyPage() {
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 max-w-2xl mx-auto w-full">
-            {attendants.map((attendant) => (
-              <Link
-                key={attendant.id}
-                href={`/${attendant.slug}`}
-                className="group relative bg-[#111b21] hover:bg-[#182229] border border-[#222e35] hover:border-emerald-500/50 rounded-2xl p-6 transition-all duration-200 shadow-lg hover:shadow-emerald-950/30 flex flex-col justify-between"
-              >
-                {/* Header with Avatar & Online Badge */}
-                <div className="flex flex-col items-center text-center space-y-3">
-                  <div className="relative">
-                    {attendant.avatar ? (
-                      <img
-                        src={attendant.avatar}
-                        alt={attendant.name}
-                        className="w-20 h-20 rounded-full object-cover ring-2 ring-emerald-500/50 group-hover:ring-emerald-400 transition-all shadow-md"
-                      />
-                    ) : (
-                      <div className="w-20 h-20 rounded-full bg-[#202c33] flex items-center justify-center text-emerald-400 text-2xl font-bold ring-2 ring-emerald-500/40">
-                        {attendant.name.charAt(0)}
-                      </div>
-                    )}
-                    <span
-                      className="absolute bottom-0 right-0 w-4 h-4 bg-emerald-500 border-2 border-[#111b21] rounded-full shadow-sm"
-                      title="Online agora"
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-2xl mx-auto w-full">
+            {attendants.map((attendant) => {
+              const firstName = attendant.name.trim().split(/\s+/)[0] || attendant.name;
+              return (
+                <Link
+                  key={attendant.id}
+                  href={`/${attendant.slug}`}
+                  className="group relative w-full aspect-[3/4] rounded-2xl overflow-hidden border border-[#222e35] hover:border-emerald-500/60 shadow-xl hover:shadow-2xl hover:shadow-emerald-950/40 transition-all duration-300 flex flex-col justify-between p-4 sm:p-5"
+                >
+                  {/* Foto de Fundo preenchendo todo o cartão */}
+                  {attendant.avatar ? (
+                    <img
+                      src={attendant.avatar}
+                      alt={attendant.name}
+                      className="absolute inset-0 w-full h-full object-cover object-top transition-transform duration-500 group-hover:scale-105"
                     />
-                  </div>
+                  ) : (
+                    <div className="absolute inset-0 bg-gradient-to-tr from-emerald-950 via-[#182229] to-[#111b21] flex items-center justify-center">
+                      <span className="text-6xl font-bold text-emerald-400/30">
+                        {attendant.name.charAt(0)}
+                      </span>
+                    </div>
+                  )}
 
-                  <div>
-                    <h3 className="text-base font-bold text-white group-hover:text-emerald-300 transition-colors flex items-center justify-center gap-1.5">
-                      <span>{attendant.name}</span>
-                      <UserCheck className="w-4 h-4 text-emerald-400" />
-                    </h3>
-                    <p className="text-xs text-[#8696a0] mt-0.5 line-clamp-2">
-                      {attendant.bio || "Especialista em Vendas e Atendimento"}
-                    </p>
-                  </div>
-                </div>
+                  {/* Gradientes para contraste e legibilidade perfeita */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-black/20 pointer-events-none" />
 
-                {/* Product Badge */}
-                {attendant.productName && (
-                  <div className="my-4 py-2 px-3 bg-[#0b141a]/60 border border-[#222e35] rounded-xl text-center">
-                    <span className="text-[11px] text-[#8696a0] block truncate">
-                      {attendant.productName}
+                  {/* Topo: Status Online & Preço */}
+                  <div className="relative z-10 flex items-center justify-between w-full">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-emerald-400 text-[11px] font-medium shadow-md">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      Online agora
                     </span>
-                    <span className="text-xs font-bold text-emerald-400">
-                      R$ {Number(attendant.productPrice).toFixed(2).replace(".", ",")}
-                    </span>
+
+                    {attendant.productPrice > 0 && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-white text-[11px] font-bold shadow-md">
+                        <span className="text-emerald-400">
+                          R$ {Number(attendant.productPrice).toFixed(2).replace(".", ",")}
+                        </span>
+                      </span>
+                    )}
                   </div>
-                )}
 
-                {/* Action Button */}
-                <div className="w-full mt-2 py-2.5 px-4 bg-emerald-600 group-hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold text-center transition-all flex items-center justify-center gap-2 shadow-md shadow-emerald-950/40">
-                  <span>Conversar com {attendant.name.split(" ")[0]}</span>
-                  <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
-                </div>
+                  {/* Base: Informações & Botão de Conversar */}
+                  <div className="relative z-10 space-y-3">
+                    <div>
+                      <h3 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2 drop-shadow-md">
+                        <span>{attendant.name}</span>
+                        <UserCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                      </h3>
+                      {attendant.bio && (
+                        <p className="text-xs text-white/80 line-clamp-1 drop-shadow-sm mt-0.5">
+                          {attendant.bio}
+                        </p>
+                      )}
+                      {attendant.productName && (
+                        <p className="text-[11px] text-emerald-300 font-medium line-clamp-1 drop-shadow-sm">
+                          {attendant.productName}
+                        </p>
+                      )}
+                    </div>
 
-                <div className="text-center mt-2">
-                  <span className="text-[10px] text-[#8696a0]/70 font-mono">
-                    /{attendant.slug}
-                  </span>
-                </div>
-              </Link>
-            ))}
+                    {/* Botão Conversar com [NOME] */}
+                    <div className="w-full py-2.5 sm:py-3 px-4 bg-emerald-600 group-hover:bg-emerald-500 text-white rounded-xl text-xs sm:text-sm font-semibold text-center transition-all flex items-center justify-center gap-2 shadow-lg shadow-black/50">
+                      <span>Conversar com {firstName}</span>
+                      <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+                    </div>
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         )}
       </main>
